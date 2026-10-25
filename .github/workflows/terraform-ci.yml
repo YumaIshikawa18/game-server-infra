@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  TFLINT_VERSION: v0.65.0
+  TRIVY_VERSION: v0.76.1
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_WORKING_DIR: envs/prod
@@ -27,10 +29,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # ツールのバージョンは mise.toml で管理する（terraform / tflint / trivy）
+      # Terraform のバージョンは mise.toml で管理する
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
-        with:
-          version: 2026.10.19
 
       - name: terraform fmt
         run: terraform fmt -check -recursive -diff
@@ -56,6 +56,10 @@ jobs:
             echo "::endgroup::"
           done
 
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
       - name: tflint
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -64,7 +68,13 @@ jobs:
           tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl" --format compact
 
       - name: trivy (IaC misconfiguration)
-        run: trivy config --severity HIGH,CRITICAL --exit-code 1 .
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          version: ${{ env.TRIVY_VERSION }}
 
   plan:
     name: plan (prod)
@@ -82,11 +92,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # ツールのバージョンは mise.toml で管理する
+      # Terraform のバージョンは mise.toml で管理する
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
-        with:
-          version: 2026.10.19
-          install_args: terraform
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
