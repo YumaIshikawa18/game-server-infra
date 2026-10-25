@@ -27,7 +27,7 @@ flowchart LR
       DATA[(EBS: world<br/>/opt/minecraft)]
     end
     EIP[Elastic IP]
-    SSM[(SSM Parameter Store<br/>/mc/ram, /mc/shutdowntimer)]
+    SSM[(SSM Parameter Store<br/>/mc/ram, /mc/shutdowntimer<br/>/mc/ops, /mc/whitelist)]
     DOC[SSM Document<br/>server-status]
     BK[(S3: world backup<br/>任意)]
   end
@@ -48,6 +48,7 @@ flowchart LR
 | --- | --- |
 | `minecraft.socket` | `/run/minecraft.stdin`（FIFO）をサーバーの標準入力にする |
 | `minecraft.service` | `/mc/ram` を読んで `java -Xms -Xmx -jar server.jar nogui` を起動する。`eula=true` でなければ起動しない（`ExecCondition`）。停止時は stdin に `stop` を送って正常終了を待つ |
+| `minecraft-players.service` | `minecraft.service` と一緒に起動し、起動完了（`Done`）を待ってから、`/mc/ops` と `/mc/whitelist`（SecureString）のプレイヤーに `op` / `whitelist add` を送る |
 | `monitor_minecraft.service` | 60 秒ごとに 25565 番ポートの接続数を確認し、無人のまま `/mc/shutdowntimer` 秒たったらサーバーを止め、（有効なら）バックアップを取ってから OS を停止する。OS が止まると EC2 は stopped になる |
 | `minecraft-backup.timer` | 有効な場合のみ。日次でワールドを S3 にバックアップする（`Persistent=true` なので、停止中に時刻を過ぎた分は次の起動時に実行される） |
 
@@ -60,7 +61,7 @@ flowchart LR
 │   ├── network/                # VPC / パブリックサブネット / IGW / ルートテーブル（既定 VPC も選べる）
 │   ├── security_group/         # 25565（全公開）と 22（Instance Connect の CIDR のみ）
 │   ├── iam/                    # インスタンスロール（SSM Core と /mc/* の読み取り）
-│   ├── ssm_parameters/         # /mc/ram と /mc/shutdowntimer
+│   ├── ssm_parameters/         # /mc/ram、/mc/shutdowntimer、/mc/ops・/mc/whitelist（SecureString、値は手動）
 │   ├── minecraft_server/       # EC2、ワールド用 EBS、EIP、user data（templatefile）、status 用 SSM ドキュメント
 │   │   └── templates/
 │   └── world_backup/           # バックアップ用 S3 とアップロード権限（任意）
@@ -129,6 +130,38 @@ bootstrap の state はローカルの `bootstrap/terraform.tfstate` に残り�
    - `prod`：**Required reviewers** に自分を追加し、**Deployment branches** を `master` だけに制限します。apply と destroy はこの承認を経ないと実行されません。
    - `prod-ops`：承認者は付けず、**Deployment branches** を `master` だけに制限します。server-control が使います。
 3. **Settings → Branches** で `master` にブランチ保護（または Ruleset）を設定し、PR を必須にします。必須のチェックには `fmt / validate / tflint / trivy` と `plan (prod)` を指定することをおすすめします。
+4. （任意）Discord に起動・停止を通知したい場合は、Environment `prod-ops` の **Secrets** に `DISCORD_WEBHOOK_URL` を登録します。登録しなければ通知のステップは実行されません。
+
+## 設定値と秘密情報の置き場所
+
+このリポジトリは public です。値ごとに「公開されても困らないか」と「誰がいつ使うか」で、置き場所を分けています。
+
+| 種類 | 置き場所 | 例 | 変更方法 |
+| --- | --- | --- | --- |
+| 公開されても困らない設定値 | `envs/prod/terraform.tfvars`（コミットする） | インスタンスタイプ、バージョン、メモリ、`accept_eula` | PR で変更し、CD で apply |
+| Terraform より前にワークフローが必要とする値 | GitHub Variables | state バケット名、ロール ARN | `gh variable set` |
+| ワークフローが使う秘密情報 | GitHub Secrets（Environment `prod-ops`） | `DISCORD_WEBHOOK_URL` | `gh secret set --env prod-ops` |
+| サーバーが使う個人情報・秘密情報 | SSM パラメータストア（SecureString） | `/mc/ops`、`/mc/whitelist`（プレイヤー名） | **手動**（下記） |
+
+### SSM パラメータ（SecureString）の扱い
+
+- Terraform は `value_wo`（write-only 引数）を使い、`dummy` という値でパラメータを作るだけです。値は tfstate に保存されません。また、`value_wo_version` を変えない限り、apply しても手動で入れた値は上書きされません。
+- サーバーは `dummy` を「未設定」として扱います。
+- 値はプレイヤー名のカンマ区切りです。Java 版のユーザー名の形式（英数字と `_`、3〜16 文字）以外の名前は、コンソールへのコマンド注入を防ぐために無視します。
+
+```bash
+# op を付けるプレイヤー
+aws ssm put-parameter --name /mc/ops --type SecureString --overwrite --value "PlayerA"
+# ホワイトリスト（設定すると whitelist on になる。dummy に戻しても自動では off にならない）
+aws ssm put-parameter --name /mc/whitelist --type SecureString --overwrite --value "PlayerA,PlayerB,PlayerC"
+```
+
+値はサーバーが次に起動したときに反映されます。すぐに反映したい場合は、稼働中のサーバーで `sudo systemctl restart minecraft-players` を実行します。反映は追加だけです。リストから消したプレイヤーは、`sudo mc-cmd deop <player>` や `sudo mc-cmd whitelist remove <player>` で手動で外してください。
+
+### 注意点
+
+- **PR に投稿される plan のコメントも公開されます。** 中身はアカウント ID、IP、リソース名などで、秘密情報ではない前提です。SecureString の値は write-only なので、plan には出ません。
+- SecureString は AWS 管理キー（`aws/ssm`）で暗号化しています。KMS の追加料金はかかりません。plan ロールは `/mc/*` を読めるため、同じリポジトリのブランチからの PR では復号できます。public リポジトリでも、ブランチを push できるのはコラボレーターだけなので、許容しています。
 
 ## 2. デプロイから接続確認まで
 
@@ -179,7 +212,7 @@ gh workflow run server-control.yml -f action=start
 
 ### コンソールコマンド（op の付与など）
 
-`mc-cmd` は、稼働中のサーバーの標準入力にコマンドを送るヘルパーです。
+`mc-cmd` は、稼働中のサーバーの標準入力にコマンドを送るヘルパーです。op や whitelist を毎回の起動で反映したい場合は、[SSM パラメータ](#ssm-パラメータsecurestringの扱い)を使ってください。
 
 ```bash
 sudo mc-cmd op <player>
@@ -229,6 +262,7 @@ sudo systemctl start minecraft monitor_minecraft
 | メモリ・自動停止時間を変える | `jvm_memory_mb` / `shutdown_timer_seconds` を変えて apply すると、SSM パラメータが更新されます。サーバーの次回起動時から反映されます |
 | Minecraft のバージョンを上げる | `minecraft_version` を変えて apply します。user data が変わるのでインスタンスは作り直されますが、ワールド用 EBS はそのまま引き継がれます |
 | AMI を更新する | `ignore_changes = [ami]` にしているため、自動では更新しません。`terraform apply -replace=module.minecraft_server.aws_instance.this` を実行するか、バージョンアップに合わせて作り直してください |
+| op / whitelist のプレイヤーを変える | SSM の `/mc/ops` / `/mc/whitelist` を手動で更新します（[置き場所](#設定値と秘密情報の置き場所)を参照） |
 | 自動停止を一時的に止める | `sudo systemctl stop monitor_minecraft` を実行します（再起動すると元に戻ります） |
 | バックアップを有効にする | `enable_backup = true` にします。保存先は出力の `backup_bucket_name` です |
 
@@ -287,6 +321,7 @@ sudo systemctl start minecraft monitor_minecraft
 | 再起動の手段 | なし | `server-control` ワークフロー | 自動停止したあとに起動する手段が必要なため |
 | IMDS / EBS | 既定のまま | IMDSv2 必須、EBS は暗号化 | セキュリティのベースラインとして |
 | SSM の権限 | `AmazonSSMManagedInstanceCore` | 同じものに permissions boundary を付け、`ssm:GetParameter` を `/mc/*` に限定 | 最小権限にするため |
+| op / whitelist | 手動でコンソールに入力 | SSM の SecureString（手動で設定）から起動のたびに反映 | 個人情報を public リポジトリに置かずに、宣言的に管理するため |
 
 ### 監視スクリプトを user data に組み込んだ理由（SSM ドキュメントとの比較）
 
@@ -304,7 +339,7 @@ sudo systemctl start minecraft monitor_minecraft
 terraform fmt -check -recursive
 for d in bootstrap envs/prod; do terraform -chdir=$d init -backend=false && terraform -chdir=$d validate; done
 terraform -chdir=envs/prod test                       # mock provider を使うので AWS 接続は不要
-terraform -chdir=modules/minecraft_server init -backend=false && terraform -chdir=modules/minecraft_server test
+for d in modules/minecraft_server modules/ssm_parameters; do terraform -chdir=$d init -backend=false && terraform -chdir=$d test; done
 tflint --init --config "$PWD/.tflint.hcl" && tflint --recursive --config "$PWD/.tflint.hcl"
 trivy config --severity HIGH,CRITICAL .
 ```
@@ -317,6 +352,8 @@ trivy の指摘のうち意図して受け入れているものは、リソー�
 - [Configuring OpenID Connect in Amazon Web Services（GitHub Docs）](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - [Managing environments for deployment（GitHub Docs）](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
 - [Security hardening for GitHub Actions（SHA での固定）](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)
+- [Terraform: write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral/write-only)
+- [aws_ssm_parameter（value_wo）](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter)
 - [Permissions boundaries for IAM entities](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html)
 - [AWS IP address ranges（EC2_INSTANCE_CONNECT）](https://docs.aws.amazon.com/vpc/latest/userguide/aws-ip-ranges.html)
 - [Amazon Corretto 25 on Amazon Linux 2023](https://docs.aws.amazon.com/corretto/latest/corretto-25-ug/amazon-linux-install.html)

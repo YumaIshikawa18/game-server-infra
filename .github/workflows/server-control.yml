@@ -31,6 +31,8 @@ jobs:
       PROJECT: minecraft
       ENVIRONMENT: prod
       MINECRAFT_PORT: "25565"
+      # 任意。Environment "prod-ops" の Secrets に設定すると、start / stop の結果を Discord に通知する
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -55,6 +57,7 @@ jobs:
           echo "id=$ids" >>"$GITHUB_OUTPUT"
 
       - name: ${{ inputs.action }}
+        id: control
         env:
           INSTANCE_ID: ${{ steps.instance.outputs.id }}
           STATUS_DOCUMENT: minecraft-prod-server-status
@@ -92,6 +95,8 @@ jobs:
             [ "$ip" != "None" ] && echo "| address | \`$ip:$MINECRAFT_PORT\` |"
           } >>"$GITHUB_STEP_SUMMARY"
           echo "instance=$INSTANCE_ID state=$current ip=$ip"
+          echo "state=$current" >>"$GITHUB_OUTPUT"
+          [ "$ip" != "None" ] && echo "address=$ip:$MINECRAFT_PORT" >>"$GITHUB_OUTPUT"
 
           if [ "$ACTION" = "start" ]; then
             echo "::notice::Started. Minecraft takes 1-2 minutes to accept connections. It stops automatically after the idle timer if nobody joins."
@@ -106,3 +111,17 @@ jobs:
             echo "$output"
             { echo '```'; echo "$output"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Notify Discord
+        if: env.DISCORD_WEBHOOK_URL != '' && inputs.action != 'status'
+        env:
+          STATE: ${{ steps.control.outputs.state }}
+          ADDRESS: ${{ steps.control.outputs.address }}
+        run: |
+          if [ "$ACTION" = "start" ]; then
+            message="Minecraft サーバーを起動しました: \`$ADDRESS\`（1〜2 分後に接続できます）"
+          else
+            message="Minecraft サーバーを停止しました（state: $STATE）"
+          fi
+          jq -n --arg content "$message" '{content: $content}' |
+            curl --fail --silent --show-error -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL"

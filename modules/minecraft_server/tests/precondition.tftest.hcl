@@ -31,6 +31,8 @@ variables {
   ram_parameter_name            = "/mc/ram"
   shutdown_timer_parameter_name = "/mc/shutdowntimer"
   shutdown_timer_seconds        = 900
+  ops_parameter_name            = "/mc/ops"
+  whitelist_parameter_name      = "/mc/whitelist"
 }
 
 run "heap_fits" {

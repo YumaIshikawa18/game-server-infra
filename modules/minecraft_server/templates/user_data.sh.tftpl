@@ -110,6 +110,9 @@ RAM_PARAMETER=${ram_parameter_name}
 DEFAULT_RAM_MB=${default_ram_mb}
 SHUTDOWN_TIMER_PARAMETER=${shutdown_timer_parameter_name}
 DEFAULT_SHUTDOWN_TIMER=${default_shutdown_timer}
+OPS_PARAMETER=${ops_parameter_name}
+WHITELIST_PARAMETER=${whitelist_parameter_name}
+SECURE_PARAMETER_DUMMY_VALUE=${secure_parameter_dummy_value}
 BACKUP_S3_URI=$BACKUP_S3_URI
 EOF
 
@@ -214,8 +217,49 @@ tar --exclude=./server.jar --exclude=./server.jar.tmp --exclude=./libraries \
 echo "uploaded $key"
 EOF
 
+cat >/usr/local/bin/minecraft-sync-players <<'EOF'
+#!/bin/bash
+# /mc/ops と /mc/whitelist（SecureString、値は手動で設定）を読み、起動完了後のサーバーに反映する。
+# 値はプレイヤー名のカンマ区切り。dummy のままなら何もしない。
+# 追加だけを行う（パラメータから消した名前は、手動で deop / whitelist remove する）。
+set -euo pipefail
+
+read_players() {
+  local value name
+  value=$(aws ssm get-parameter --region "$AWS_REGION" --name "$1" --with-decryption \
+    --query Parameter.Value --output text 2>/dev/null || true)
+  if [ -z "$value" ] || [ "$value" = "$SECURE_PARAMETER_DUMMY_VALUE" ]; then
+    return 0
+  fi
+  for name in $(tr ',' ' ' <<<"$value"); do
+    # コンソールへのコマンド注入を防ぐため、Java 版のユーザー名の形式だけを通す
+    if [[ "$name" =~ ^[A-Za-z0-9_]{3,16}$ ]]; then
+      echo "$name"
+    else
+      echo "skipping an invalid player name in $1" >&2
+    fi
+  done
+}
+
+started=$(systemctl show -p ExecMainStartTimestamp --value minecraft.service)
+since="@$(date -d "$started" +%s)"
+until journalctl -u minecraft.service --since "$since" -o cat | grep -q 'Done ('; do
+  systemctl is-active --quiet minecraft.service || exit 0
+  sleep 5
+done
+
+mapfile -t ops < <(read_players "$OPS_PARAMETER")
+mapfile -t whitelist < <(read_players "$WHITELIST_PARAMETER")
+for name in "$${ops[@]}"; do mc-cmd op "$name"; done
+if [ "$${#whitelist[@]}" -gt 0 ]; then
+  for name in "$${whitelist[@]}"; do mc-cmd whitelist add "$name"; done
+  mc-cmd whitelist on
+fi
+echo "applied $${#ops[@]} op(s) and $${#whitelist[@]} whitelist entries"
+EOF
+
 chmod 0755 /usr/local/bin/minecraft-start /usr/local/bin/minecraft-stop /usr/local/bin/mc-cmd \
-  /usr/local/bin/minecraft-monitor /usr/local/bin/minecraft-backup
+  /usr/local/bin/minecraft-monitor /usr/local/bin/minecraft-backup /usr/local/bin/minecraft-sync-players
 
 cat >/etc/systemd/system/minecraft.socket <<'EOF'
 [Unit]
@@ -261,6 +305,23 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
+# minecraft.service が起動するたびに一緒に起動し、起動完了を待って op / whitelist を反映する
+cat >/etc/systemd/system/minecraft-players.service <<'EOF'
+[Unit]
+Description=Apply ops and whitelist from SSM Parameter Store
+After=minecraft.service
+BindsTo=minecraft.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sysconfig/minecraft
+ExecStart=/usr/local/bin/minecraft-sync-players
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=minecraft.service
+EOF
+
 cat >/etc/systemd/system/monitor_minecraft.service <<'EOF'
 [Unit]
 Description=Stop the instance when no Minecraft players are connected
@@ -302,6 +363,7 @@ WantedBy=timers.target
 EOF
 
 systemctl daemon-reload
+systemctl enable minecraft-players.service
 systemctl enable --now minecraft.socket minecraft.service monitor_minecraft.service
 if [ -n "$BACKUP_S3_URI" ]; then
   systemctl enable --now minecraft-backup.timer

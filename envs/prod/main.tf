@@ -101,6 +101,9 @@ module "minecraft_server" {
   ram_parameter_name            = module.ssm_parameters.ram_parameter_name
   shutdown_timer_seconds        = var.shutdown_timer_seconds
   shutdown_timer_parameter_name = module.ssm_parameters.shutdown_timer_parameter_name
+  ops_parameter_name            = module.ssm_parameters.ops_parameter_name
+  whitelist_parameter_name      = module.ssm_parameters.whitelist_parameter_name
+  secure_parameter_dummy_value  = module.ssm_parameters.secure_parameter_dummy_value
 
   backup_s3_uri      = var.enable_backup ? module.world_backup[0].s3_uri : null
   backup_on_calendar = var.backup_on_calendar

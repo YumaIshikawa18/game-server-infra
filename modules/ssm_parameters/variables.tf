@@ -18,3 +18,9 @@ variable "shutdown_timer_seconds" {
   description = "無人状態がこの秒数続いたら EC2 を停止する"
   type        = number
 }
+
+variable "secure_parameter_dummy_value" {
+  description = "SecureString パラメータを作るときの初期値。サーバー側はこの値を「未設定」として扱う"
+  type        = string
+  default     = "dummy"
+}

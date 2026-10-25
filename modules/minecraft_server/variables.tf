@@ -101,6 +101,22 @@ variable "shutdown_timer_parameter_name" {
   type        = string
 }
 
+variable "ops_parameter_name" {
+  description = "op を付けるプレイヤー名を持つ SecureString パラメータ名"
+  type        = string
+}
+
+variable "whitelist_parameter_name" {
+  description = "ホワイトリストに入れるプレイヤー名を持つ SecureString パラメータ名"
+  type        = string
+}
+
+variable "secure_parameter_dummy_value" {
+  description = "SecureString パラメータが未設定であることを表す値"
+  type        = string
+  default     = "dummy"
+}
+
 variable "backup_s3_uri" {
   description = "バックアップの保存先（s3://bucket/prefix）。null ならバックアップしない"
   type        = string

@@ -51,8 +51,13 @@ jobs:
       - name: terraform test
         run: |
           terraform -chdir="$TF_WORKING_DIR" test
-          terraform -chdir=modules/minecraft_server init -backend=false
-          terraform -chdir=modules/minecraft_server test
+          for dir in modules/*/; do
+            [ -d "$dir/tests" ] || continue
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" test
+            echo "::endgroup::"
+          done
 
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:

@@ -23,6 +23,9 @@ locals {
     ram_parameter_name            = var.ram_parameter_name
     default_ram_mb                = var.jvm_memory_mb
     shutdown_timer_parameter_name = var.shutdown_timer_parameter_name
+    ops_parameter_name            = var.ops_parameter_name
+    whitelist_parameter_name      = var.whitelist_parameter_name
+    secure_parameter_dummy_value  = var.secure_parameter_dummy_value
     default_shutdown_timer        = var.shutdown_timer_seconds
     backup_s3_uri                 = var.backup_s3_uri == null ? "" : var.backup_s3_uri
     backup_on_calendar            = var.backup_on_calendar

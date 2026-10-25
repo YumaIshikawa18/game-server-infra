@@ -1,5 +1,6 @@
 # 設定できる値の一覧。使う値だけを terraform.tfvars に書く（CI/CD は terraform.tfvars を読む）。
 # コメントアウトされた値は variables.tf の既定値。
+# 公開されても困らない値だけを書くこと。プレイヤー名などは SSM の /mc/ops, /mc/whitelist に手動で設定する。
 
 # --- 共通 ---
 # region       = "ap-northeast-1"

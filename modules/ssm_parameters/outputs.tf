@@ -8,7 +8,25 @@ output "shutdown_timer_parameter_name" {
   value       = aws_ssm_parameter.shutdown_timer.name
 }
 
+output "ops_parameter_name" {
+  description = "op を付けるプレイヤー名（SecureString、値は手動で設定）のパラメータ名"
+  value       = aws_ssm_parameter.secure["ops"].name
+}
+
+output "whitelist_parameter_name" {
+  description = "ホワイトリストに入れるプレイヤー名（SecureString、値は手動で設定）のパラメータ名"
+  value       = aws_ssm_parameter.secure["whitelist"].name
+}
+
+output "secure_parameter_dummy_value" {
+  description = "SecureString パラメータの初期値（サーバー側で未設定として扱う値）"
+  value       = var.secure_parameter_dummy_value
+}
+
 output "parameter_arns" {
-  description = "作成したパラメータの ARN"
-  value       = [aws_ssm_parameter.ram.arn, aws_ssm_parameter.shutdown_timer.arn]
+  description = "インスタンスが読み取るパラメータの ARN"
+  value = concat(
+    [aws_ssm_parameter.ram.arn, aws_ssm_parameter.shutdown_timer.arn],
+    [for p in aws_ssm_parameter.secure : p.arn],
+  )
 }
