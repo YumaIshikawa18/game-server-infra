@@ -1,0 +1,17 @@
+# SHA 固定した Actions と Terraform provider の更新 PR を作る
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - /bootstrap
+      - /envs/prod
+    schedule:
+      interval: monthly

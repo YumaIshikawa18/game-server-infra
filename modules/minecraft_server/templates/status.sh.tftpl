@@ -1,0 +1,9 @@
+#!/bin/bash
+# server-control ワークフローの status から SSM Run Command で実行される（読み取りのみ）
+# shellcheck source=/dev/null
+. /etc/sysconfig/minecraft 2>/dev/null || true
+echo "minecraft.service:         $(systemctl is-active minecraft.service)"
+echo "monitor_minecraft.service: $(systemctl is-active monitor_minecraft.service)"
+echo "version:                   $${MC_VERSION:-unknown}"
+echo "players (connections):     $(ss -Htn state established '( sport = :${minecraft_port} )' | wc -l)"
+echo "uptime:                    $(uptime -p)"

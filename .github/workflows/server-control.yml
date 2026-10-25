@@ -1,0 +1,108 @@
+name: server-control
+
+# 自動停止したサーバーを、遊ぶときに起動するためのワークフロー（ブログには起動手段がないため）
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 操作
+        type: choice
+        options: [status, start, stop]
+        default: status
+
+permissions: {}
+
+concurrency:
+  group: server-control-prod
+  cancel-in-progress: false
+
+jobs:
+  control:
+    name: ${{ inputs.action }}
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # ops ロールは Environment "prod-ops" からのみ引き受けられる（承認は不要な想定）
+    environment: prod-ops
+    permissions:
+      id-token: write
+    env:
+      ACTION: ${{ inputs.action }}
+      PROJECT: minecraft
+      ENVIRONMENT: prod
+      MINECRAFT_PORT: "25565"
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_OPS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+          role-session-name: server-control-${{ github.run_id }}
+
+      - name: Find instance
+        id: instance
+        run: |
+          ids=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=$PROJECT" \
+                      "Name=tag:Environment,Values=$ENVIRONMENT" \
+                      "Name=tag:Name,Values=$PROJECT-$ENVIRONMENT-server" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          count=$(wc -w <<<"$ids")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly one instance, found $count: $ids"
+            exit 1
+          fi
+          echo "id=$ids" >>"$GITHUB_OUTPUT"
+
+      - name: ${{ inputs.action }}
+        env:
+          INSTANCE_ID: ${{ steps.instance.outputs.id }}
+          STATUS_DOCUMENT: minecraft-prod-server-status
+        run: |
+          state() {
+            aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+              --query 'Reservations[0].Instances[0].State.Name' --output text
+          }
+          public_ip() {
+            aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+              --query 'Reservations[0].Instances[0].PublicIpAddress' --output text
+          }
+
+          case "$ACTION" in
+            start)
+              [ "$(state)" = "stopping" ] && aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID"
+              aws ec2 start-instances --instance-ids "$INSTANCE_ID" >/dev/null
+              aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+              ;;
+            stop)
+              # OS のシャットダウンで minecraft.service の ExecStop が走り、ワールドが保存される
+              aws ec2 stop-instances --instance-ids "$INSTANCE_ID" >/dev/null
+              aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID"
+              ;;
+          esac
+
+          current=$(state)
+          ip=$(public_ip)
+          {
+            echo "### Minecraft server ($ENVIRONMENT)"
+            echo "| item | value |"
+            echo "| --- | --- |"
+            echo "| instance | \`$INSTANCE_ID\` |"
+            echo "| state | $current |"
+            [ "$ip" != "None" ] && echo "| address | \`$ip:$MINECRAFT_PORT\` |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          echo "instance=$INSTANCE_ID state=$current ip=$ip"
+
+          if [ "$ACTION" = "start" ]; then
+            echo "::notice::Started. Minecraft takes 1-2 minutes to accept connections. It stops automatically after the idle timer if nobody joins."
+          fi
+
+          if [ "$ACTION" = "status" ] && [ "$current" = "running" ]; then
+            command_id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
+              --document-name "$STATUS_DOCUMENT" --query 'Command.CommandId' --output text)
+            aws ssm wait command-executed --command-id "$command_id" --instance-id "$INSTANCE_ID" || true
+            output=$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query 'StandardOutputContent' --output text)
+            echo "$output"
+            { echo '```'; echo "$output"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+          fi

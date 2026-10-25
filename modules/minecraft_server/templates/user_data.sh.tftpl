@@ -1,0 +1,309 @@
+#!/bin/bash
+# Minecraft Java サーバーの初回セットアップ（Terraform の templatefile で生成）
+# 出力は /var/log/cloud-init-output.log に残る。
+#
+# ワールドは別 EBS（/opt/minecraft）に置くため、インスタンスを作り直してもこのスクリプトは
+# 既存データを壊さずに再実行できるように書いている（冪等）。
+set -euo pipefail
+
+readonly MC_HOME=/opt/minecraft
+readonly SERVER_DIR=$MC_HOME/server
+readonly DATA_DEVICE=/dev/disk/by-id/${data_volume_device_name}
+readonly MANIFEST_URL=https://piston-meta.mojang.com/mc/game/version_manifest_v2.json
+readonly MC_VERSION_REQUESTED="${minecraft_version}"
+readonly ACCEPT_EULA="${accept_eula}"
+readonly BACKUP_S3_URI="${backup_s3_uri}"
+
+log() { echo "[minecraft-bootstrap] $*"; }
+curl_retry() { curl --fail --silent --show-error --location --retry 10 --retry-delay 5 --retry-all-errors "$@"; }
+
+dnf install -y jq
+
+################################################################################
+# データ用 EBS のマウント（aws_volume_attachment はインスタンス起動後に行われるため待つ）
+################################################################################
+log "waiting for data volume: $DATA_DEVICE"
+for _ in $(seq 1 120); do
+  [ -b "$DATA_DEVICE" ] && break
+  sleep 5
+done
+[ -b "$DATA_DEVICE" ] || { log "data volume was not attached in time"; exit 1; }
+udevadm settle
+
+if ! blkid -p "$DATA_DEVICE" >/dev/null 2>&1; then
+  log "formatting new data volume"
+  mkfs.xfs -L mcdata "$DATA_DEVICE"
+fi
+DATA_UUID=$(blkid -p -s UUID -o value "$DATA_DEVICE")
+mkdir -p "$MC_HOME"
+grep -q "UUID=$DATA_UUID" /etc/fstab || echo "UUID=$DATA_UUID $MC_HOME xfs defaults,nofail 0 2" >>/etc/fstab
+systemctl daemon-reload
+mountpoint -q "$MC_HOME" || mount "$MC_HOME"
+
+id minecraft >/dev/null 2>&1 || useradd --system --home-dir "$MC_HOME" --no-create-home --shell /sbin/nologin minecraft
+mkdir -p "$SERVER_DIR"
+
+################################################################################
+# Mojang の version manifest から server.jar と必要な Java のバージョンを解決する
+################################################################################
+MANIFEST=$(curl_retry "$MANIFEST_URL")
+MC_VERSION=$MC_VERSION_REQUESTED
+if [ "$MC_VERSION" = "latest" ]; then
+  MC_VERSION=$(jq -r '.latest.release' <<<"$MANIFEST")
+fi
+VERSION_URL=$(jq -r --arg v "$MC_VERSION" '.versions[] | select(.id == $v) | .url' <<<"$MANIFEST")
+[ -n "$VERSION_URL" ] || { log "version $MC_VERSION not found in manifest"; exit 1; }
+
+VERSION_JSON=$(curl_retry "$VERSION_URL")
+JAR_URL=$(jq -r '.downloads.server.url // empty' <<<"$VERSION_JSON")
+JAR_SHA1=$(jq -r '.downloads.server.sha1 // empty' <<<"$VERSION_JSON")
+JAVA_MAJOR=$(jq -r '.javaVersion.majorVersion // 21' <<<"$VERSION_JSON")
+[ -n "$JAR_URL" ] && [ -n "$JAR_SHA1" ] || { log "version $MC_VERSION has no server download"; exit 1; }
+log "minecraft $MC_VERSION requires java $JAVA_MAJOR"
+
+# ブログは java-21 固定だが、26.x 以降は Java 25 が必要なためバージョン JSON に従う
+dnf install -y "java-$JAVA_MAJOR-amazon-corretto-headless"
+JAVA_BIN=/usr/lib/jvm/java-$JAVA_MAJOR-amazon-corretto.$(uname -m)/bin/java
+[ -x "$JAVA_BIN" ] || { log "java binary not found: $JAVA_BIN"; exit 1; }
+
+if [ -f "$SERVER_DIR/server.jar" ] && echo "$JAR_SHA1  $SERVER_DIR/server.jar" | sha1sum --check --status; then
+  log "server.jar is already $MC_VERSION"
+else
+  log "downloading server.jar $MC_VERSION"
+  curl_retry --output "$SERVER_DIR/server.jar.tmp" "$JAR_URL"
+  if ! echo "$JAR_SHA1  $SERVER_DIR/server.jar.tmp" | sha1sum --check --status; then
+    rm -f "$SERVER_DIR/server.jar.tmp"
+    log "sha1 mismatch for server.jar"
+    exit 1
+  fi
+  mv -f "$SERVER_DIR/server.jar.tmp" "$SERVER_DIR/server.jar"
+fi
+
+################################################################################
+# EULA と server.properties
+################################################################################
+# accept_eula = false のときは eula=false を書き、minecraft.service の ExecCondition で起動を止める
+if [ "$ACCEPT_EULA" = "true" ]; then EULA_VALUE=true; else EULA_VALUE=false; fi
+cat >"$SERVER_DIR/eula.txt" <<EOF
+#Managed by Terraform (accept_eula). https://aka.ms/MinecraftEULA
+eula=$EULA_VALUE
+EOF
+log "eula=$EULA_VALUE"
+
+if [ -f "$SERVER_DIR/server.properties" ]; then
+  sed -i "s/^server-port=.*/server-port=${minecraft_port}/" "$SERVER_DIR/server.properties"
+else
+  echo "server-port=${minecraft_port}" >"$SERVER_DIR/server.properties"
+fi
+
+chown -R minecraft:minecraft "$MC_HOME"
+
+################################################################################
+# スクリプトと systemd ユニット
+################################################################################
+cat >/etc/sysconfig/minecraft <<EOF
+AWS_REGION=${aws_region}
+JAVA_BIN=$JAVA_BIN
+MC_VERSION=$MC_VERSION
+MC_PORT=${minecraft_port}
+RAM_PARAMETER=${ram_parameter_name}
+DEFAULT_RAM_MB=${default_ram_mb}
+SHUTDOWN_TIMER_PARAMETER=${shutdown_timer_parameter_name}
+DEFAULT_SHUTDOWN_TIMER=${default_shutdown_timer}
+BACKUP_S3_URI=$BACKUP_S3_URI
+EOF
+
+cat >/usr/local/bin/minecraft-start <<'EOF'
+#!/bin/bash
+# /mc/ram を読み、失敗したら既定値でサーバーを起動する
+set -euo pipefail
+ram=$(aws ssm get-parameter --region "$AWS_REGION" --name "$RAM_PARAMETER" \
+  --query Parameter.Value --output text 2>/dev/null || true)
+if ! [[ "$ram" =~ ^[0-9]+$ ]] || [ "$ram" -le 0 ]; then
+  echo "could not read $RAM_PARAMETER, falling back to $DEFAULT_RAM_MB MB" >&2
+  ram=$DEFAULT_RAM_MB
+fi
+echo "starting minecraft $MC_VERSION with $ram MB heap"
+exec "$JAVA_BIN" -Xms"$ram"M -Xmx"$ram"M -jar server.jar nogui
+EOF
+
+cat >/usr/local/bin/minecraft-stop <<'EOF'
+#!/bin/bash
+# systemd の ExecStop から呼ばれる。kill -9 ではなく標準入力に stop を送り、
+# ワールドの保存と正常終了を待つ（TimeoutStopSec を超えたら systemd が SIGTERM を送る）
+set -u
+if [ -n "$${MAINPID:-}" ] && kill -0 "$MAINPID" 2>/dev/null; then
+  echo "stop" >/run/minecraft.stdin
+  while kill -0 "$MAINPID" 2>/dev/null; do sleep 1; done
+fi
+EOF
+
+cat >/usr/local/bin/mc-cmd <<'EOF'
+#!/bin/bash
+# 稼働中のサーバーにコンソールコマンドを送る。例: sudo mc-cmd op <player>
+set -euo pipefail
+[ $# -gt 0 ] || { echo "usage: mc-cmd <command...>" >&2; exit 2; }
+systemctl is-active --quiet minecraft.service || { echo "minecraft.service is not running" >&2; exit 1; }
+echo "$*" >/run/minecraft.stdin
+EOF
+
+cat >/usr/local/bin/minecraft-monitor <<'EOF'
+#!/bin/bash
+# aws-samples/cost-optimize-minecraft-server-on-ec2 の monitor を元にしたもの。
+# 60 秒ごとに接続数を確認し、無人が /mc/shutdowntimer 秒続いたら保存して OS を停止する。
+# instance_initiated_shutdown_behavior = "stop" なので OS の停止で EC2 も stopped になる。
+set -uo pipefail
+readonly INTERVAL=60
+
+timer=$(aws ssm get-parameter --region "$AWS_REGION" --name "$SHUTDOWN_TIMER_PARAMETER" \
+  --query Parameter.Value --output text 2>/dev/null || true)
+if ! [[ "$timer" =~ ^[0-9]+$ ]] || [ "$timer" -le 0 ]; then
+  echo "could not read $SHUTDOWN_TIMER_PARAMETER, falling back to $DEFAULT_SHUTDOWN_TIMER s" >&2
+  timer=$DEFAULT_SHUTDOWN_TIMER
+fi
+echo "shutdown timer: $timer s"
+
+# 起動直後から計測を始め、誰も接続しないまま timer 秒たった場合も停止する
+idle_since=$(date +%s)
+was_idle=true
+while true; do
+  players=$(ss -Htn state established "( sport = :$MC_PORT )" | wc -l)
+  now=$(date +%s)
+  if [ "$players" -gt 0 ]; then
+    [ "$was_idle" = true ] && echo "$players connection(s), idle timer reset"
+    idle_since=$now
+    was_idle=false
+  else
+    [ "$was_idle" = false ] && echo "no players, idle timer started"
+    was_idle=true
+    if [ $((now - idle_since)) -ge "$timer" ]; then
+      echo "no players for $((now - idle_since)) s, stopping server and instance"
+      systemctl stop minecraft.service || true
+      if [ -n "$BACKUP_S3_URI" ]; then
+        systemctl start minecraft-backup.service || echo "backup failed, continuing shutdown" >&2
+      fi
+      systemctl poweroff
+      exit 0
+    fi
+  fi
+  sleep "$INTERVAL"
+done
+EOF
+
+cat >/usr/local/bin/minecraft-backup <<'EOF'
+#!/bin/bash
+# ワールドを tar.gz にして S3 へ送る。稼働中なら save-off / save-all flush で整合性を取る
+set -euo pipefail
+[ -n "$BACKUP_S3_URI" ] || { echo "backup is disabled"; exit 0; }
+
+if systemctl is-active --quiet minecraft.service; then
+  since=$(date '+%Y-%m-%d %H:%M:%S')
+  mc-cmd save-off
+  trap 'mc-cmd save-on || true' EXIT
+  mc-cmd save-all flush
+  for _ in $(seq 1 60); do
+    journalctl -u minecraft.service --since "$since" -o cat | grep -q "Saved the game" && break
+    sleep 2
+  done
+fi
+
+key="$BACKUP_S3_URI/world-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+tar --exclude=./server.jar --exclude=./server.jar.tmp --exclude=./libraries \
+  --exclude=./versions --exclude=./logs -czf - -C /opt/minecraft/server . |
+  aws s3 cp --region "$AWS_REGION" --only-show-errors - "$key"
+echo "uploaded $key"
+EOF
+
+chmod 0755 /usr/local/bin/minecraft-start /usr/local/bin/minecraft-stop /usr/local/bin/mc-cmd \
+  /usr/local/bin/minecraft-monitor /usr/local/bin/minecraft-backup
+
+cat >/etc/systemd/system/minecraft.socket <<'EOF'
+[Unit]
+Description=Minecraft server console (stdin FIFO)
+PartOf=minecraft.service
+
+[Socket]
+ListenFIFO=/run/minecraft.stdin
+SocketUser=minecraft
+SocketGroup=minecraft
+SocketMode=0660
+RemoveOnStop=true
+EOF
+
+cat >/etc/systemd/system/minecraft.service <<'EOF'
+[Unit]
+Description=Minecraft Java server
+Wants=network-online.target
+After=network-online.target minecraft.socket
+Requires=minecraft.socket
+RequiresMountsFor=/opt/minecraft
+
+[Service]
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/minecraft/server
+EnvironmentFile=/etc/sysconfig/minecraft
+ExecCondition=/usr/bin/grep -qx eula=true /opt/minecraft/server/eula.txt
+ExecStart=/usr/local/bin/minecraft-start
+ExecStop=/usr/local/bin/minecraft-stop
+TimeoutStopSec=180
+Restart=on-failure
+RestartSec=30
+Sockets=minecraft.socket
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/etc/systemd/system/monitor_minecraft.service <<'EOF'
+[Unit]
+Description=Stop the instance when no Minecraft players are connected
+Wants=network-online.target
+After=network-online.target minecraft.service
+
+[Service]
+EnvironmentFile=/etc/sysconfig/minecraft
+ExecStart=/usr/local/bin/minecraft-monitor
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/etc/systemd/system/minecraft-backup.service <<'EOF'
+[Unit]
+Description=Back up the Minecraft world to S3
+RequiresMountsFor=/opt/minecraft
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sysconfig/minecraft
+ExecStart=/usr/local/bin/minecraft-backup
+EOF
+
+cat >/etc/systemd/system/minecraft-backup.timer <<'EOF'
+[Unit]
+Description=Daily Minecraft world backup
+
+[Timer]
+OnCalendar=${backup_on_calendar}
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now minecraft.socket minecraft.service monitor_minecraft.service
+if [ -n "$BACKUP_S3_URI" ]; then
+  systemctl enable --now minecraft-backup.timer
+fi
+log "done"

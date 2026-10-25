@@ -1,0 +1,10 @@
+# cp terraform.tfvars.example terraform.tfvars して編集する（秘密情報は含まない）
+github_owner      = "YumaIshikawa18"
+github_repository = "game-server-infra"
+
+# アカウントに GitHub の OIDC プロバイダ（token.actions.githubusercontent.com）が既にある場合は false
+# create_github_oidc_provider = true
+
+# region       = "ap-northeast-1"
+# project_name = "minecraft"
+# environment  = "prod"

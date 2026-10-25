@@ -1,0 +1,77 @@
+name: terraform-destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'prod を削除します。実行するには "destroy-prod" と入力してください'
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: terraform-prod
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: 1.17.0
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_WORKING_DIR: envs/prod
+
+jobs:
+  guard:
+    name: confirm input
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check confirmation and branch
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "destroy-prod" ]; then
+            echo "::error::confirmation did not match \"destroy-prod\""
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::destroy must run from master"
+            exit 1
+          fi
+
+  destroy:
+    name: destroy (prod)
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+          role-session-name: terraform-destroy-${{ github.run_id }}
+
+      - name: terraform init
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: terraform -chdir="$TF_WORKING_DIR" init -backend-config="bucket=$TF_STATE_BUCKET"
+
+      - name: terraform plan -destroy
+        run: terraform -chdir="$TF_WORKING_DIR" plan -destroy -no-color -out=destroy.tfplan
+
+      - name: terraform apply (destroy)
+        run: terraform -chdir="$TF_WORKING_DIR" apply -no-color destroy.tfplan

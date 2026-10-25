@@ -1,0 +1,40 @@
+# 設定できる値の一覧。使う値だけを terraform.tfvars に書く（CI/CD は terraform.tfvars を読む）。
+# コメントアウトされた値は variables.tf の既定値。
+
+# --- 共通 ---
+# region       = "ap-northeast-1"
+# project_name = "minecraft"
+# environment  = "prod"
+# tags = {
+#   Owner = "your-name"
+# }
+
+# --- ネットワーク ---
+# use_default_vpc        = false
+# vpc_cidr               = "10.0.0.0/16"
+# public_subnet_cidr     = "10.0.0.0/24"
+# availability_zone      = null # null ならインスタンスタイプを提供している AZ を自動選択
+# enable_ssh             = true
+# instance_connect_cidrs = null # null なら ip-ranges.json の EC2_INSTANCE_CONNECT（東京は 3.112.23.0/29）
+
+# --- EC2 / EBS ---
+# 目安: 1〜4 人 t4g.small / 4〜8 人 t4g.medium / 8〜16 人 t4g.large / 16〜32 人 r8g.large
+# instance_type              = "t4g.small"
+# cpu_credits                = "unlimited"
+# root_volume_size           = 8
+# data_volume_size           = 8
+# data_volume_final_snapshot = true
+# use_eip                    = true
+
+# --- Minecraft ---
+# EULA（https://aka.ms/MinecraftEULA）を読み、同意する場合のみ true にする
+accept_eula = false
+# minecraft_version      = "26.3"
+# jvm_memory_mb          = 1300
+# shutdown_timer_seconds = 900
+
+# --- バックアップ ---
+# enable_backup         = false
+# backup_retention_days = 30
+# backup_on_calendar    = "*-*-* 18:00:00" # UTC（JST 03:00）
+# backup_force_destroy  = false
