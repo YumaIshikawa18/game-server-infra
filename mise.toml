@@ -1,0 +1,5 @@
+# このリポジトリで使うツールのバージョン。ローカル（mise install）と GitHub Actions（jdx/mise-action）の両方がここを参照する。
+[tools]
+terraform = "1.17.0"
+tflint = "0.65.0"
+trivy = "0.76.1"

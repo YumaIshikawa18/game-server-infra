@@ -69,7 +69,7 @@ flowchart LR
 │   └── prod/                   # ルートモジュール（backend.tf / main.tf / variables.tf / terraform.tfvars）
 ├── .github/workflows/          # terraform-ci / terraform-cd / server-control / terraform-destroy
 ├── .tflint.hcl
-└── .terraform-version          # 1.17.0
+└── mise.toml                   # terraform / tflint / trivy のバージョン（ローカルと CI で共通）
 ```
 
 ご提示の構成から変えた点は次の 3 つです。
@@ -87,7 +87,7 @@ flowchart LR
 | --- | --- |
 | AWS | 管理者相当の権限でローカルから操作できる AWS アカウント（bootstrap にだけ使う） |
 | GitHub | このリポジトリと、Environments を使えるプラン（public リポジトリ、または有料プランの private リポジトリ） |
-| ローカルのツール | Terraform 1.17.0、AWS CLI v2、GitHub CLI（`gh`）。任意で tflint 0.65.0 と trivy。サーバーにファイルを送る場合は [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) |
+| ローカルのツール | [mise](https://mise.jdx.dev/)（`mise install` で `mise.toml` の Terraform / tflint / trivy が入る）、AWS CLI v2、GitHub CLI（`gh`）。サーバーにファイルを送る場合は [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) |
 
 ## 1. bootstrap（最初に一度だけローカルで実行）
 
