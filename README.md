@@ -94,9 +94,15 @@ flowchart LR
 ```bash
 cd bootstrap
 cp terraform.tfvars.example terraform.tfvars   # github_owner / github_repository を確認する
+# アカウント ID は個人情報として扱い、コミットしない（*.auto.tfvars は .gitignore 済み）
+echo 'allowed_account_ids = ["<AWS アカウント ID>"]' > local.auto.tfvars
+export AWS_PROFILE=<個人アカウントのプロファイル>
 terraform init
-terraform apply
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
+
+`allowed_account_ids` を設定すると、ほかのアカウントの認証情報で実行したときに plan の段階でエラーになります。誤ったアカウントに作ってしまう事故を防げます。
 
 作られるものは次のとおりです。
 
@@ -116,15 +122,17 @@ bootstrap の state はローカルの `bootstrap/terraform.tfstate` に残り�
 
 ### GitHub 側の設定
 
-1. apply の出力 `github_variables_commands` をそのまま実行し、リポジトリの Variables に登録します。ARN やバケット名は秘密情報ではないため、Secrets ではなく Variables にしています。
+1. apply の出力 `github_secrets_commands`（`terraform output -raw github_secrets_commands`）をそのまま実行し、リポジトリの **Secrets** に登録します。どの値にもアカウント ID が含まれるため、Variables ではなく Secrets にしています（Secrets はログでマスクされます）。
 
-   | Variable | 値 |
+   | Secret | 値 |
    | --- | --- |
+   | `AWS_ACCOUNT_ID` | AWS アカウント ID（`allowed_account_ids` と、ログ・コメントの伏せ字に使う） |
    | `TF_STATE_BUCKET` | `state_bucket_name` |
    | `AWS_PLAN_ROLE_ARN` | `plan_role_arn` |
    | `AWS_APPLY_ROLE_ARN` | `apply_role_arn` |
    | `AWS_OPS_ROLE_ARN` | `ops_role_arn` |
-   | `AWS_REGION`（任意） | 既定は `ap-northeast-1` |
+
+   リージョンを変える場合だけ、Variables に `AWS_REGION` を登録します（既定は `ap-northeast-1`）。
 
 2. **Settings → Environments** で次の 2 つを作ります。
    - `prod`：**Required reviewers** に自分を追加し、**Deployment branches** を `master` だけに制限します。apply と destroy はこの承認を経ないと実行されません。
@@ -139,7 +147,7 @@ bootstrap の state はローカルの `bootstrap/terraform.tfstate` に残り�
 | 種類 | 置き場所 | 例 | 変更方法 |
 | --- | --- | --- | --- |
 | 公開されても困らない設定値 | `envs/prod/terraform.tfvars`（コミットする） | インスタンスタイプ、バージョン、メモリ、`accept_eula` | PR で変更し、CD で apply |
-| Terraform より前にワークフローが必要とする値 | GitHub Variables | state バケット名、ロール ARN | `gh variable set` |
+| アカウント ID と、それを含む値 | GitHub Secrets（ローカルでは gitignore 済みの `*.auto.tfvars`） | `AWS_ACCOUNT_ID`、state バケット名、ロール ARN | `gh secret set` |
 | ワークフローが使う秘密情報 | GitHub Secrets（Environment `prod-ops`） | `DISCORD_WEBHOOK_URL` | `gh secret set --env prod-ops` |
 | サーバーが使う個人情報・秘密情報 | SSM パラメータストア（SecureString） | `/mc/ops`、`/mc/whitelist`（プレイヤー名） | **手動**（下記） |
 
@@ -160,7 +168,12 @@ aws ssm put-parameter --name /mc/whitelist --type SecureString --overwrite --val
 
 ### 注意点
 
-- **PR に投稿される plan のコメントも公開されます。** 中身はアカウント ID、IP、リソース名などで、秘密情報ではない前提です。SecureString の値は write-only なので、plan には出ません。
+- **アカウント ID は個人情報として扱い、公開される場所に出さないようにしています。**
+  - コード：`allowed_account_ids` は変数にし、値はリポジトリに置きません。
+  - Actions のログ：アカウント ID を含む値はすべて Secrets から渡し、`mask-aws-account-id: true` で以降のログをマスクします。
+  - PR コメントと Job summary：ログのマスクが効かないため、書き出す前にアカウント ID を `************` に置き換えます。
+  - plan ファイル：state が丸ごと入るため、artifact で受け渡しません。apply ジョブで作り直します。
+- PR に投稿される plan のコメントは公開されます（IP、リソース名など）。SecureString の値は write-only なので、plan には出ません。
 - SecureString は AWS 管理キー（`aws/ssm`）で暗号化しています。KMS の追加料金はかかりません。plan ロールは `/mc/*` を読めるため、同じリポジトリのブランチからの PR では復号できます。public リポジトリでも、ブランチを push できるのはコラボレーターだけなので、許容しています。
 
 ## 2. デプロイから接続確認まで
@@ -175,6 +188,7 @@ aws ssm put-parameter --name /mc/whitelist --type SecureString --overwrite --val
 
 ```bash
 cd envs/prod
+echo 'allowed_account_ids = ["<AWS アカウント ID>"]' > local.auto.tfvars   # コミットしない
 terraform init -backend-config="bucket=<TF_STATE_BUCKET>"
 terraform plan -lock=false
 ```
@@ -302,7 +316,7 @@ sudo systemctl start minecraft monitor_minecraft
    terraform destroy
    ```
 
-3. GitHub の Variables と Environments（`prod` / `prod-ops`）を削除します。
+3. GitHub の Secrets と Environments（`prod` / `prod-ops`）を削除します。
 
 ## ブログとの差分
 

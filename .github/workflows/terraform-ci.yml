@@ -87,6 +87,10 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
+    env:
+      # アカウント ID は個人情報として扱う。値は Secrets から渡し、ログ・PR コメントに出さない
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TF_VAR_allowed_account_ids: '["${{ secrets.AWS_ACCOUNT_ID }}"]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,13 +101,14 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+          mask-aws-account-id: true
           role-session-name: terraform-ci-pr-${{ github.event.pull_request.number }}
 
       - name: terraform init
         env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
         run: terraform -chdir="$TF_WORKING_DIR" init -backend-config="bucket=$TF_STATE_BUCKET"
 
       # plan ロールは state への書き込み権限を持たないため、ロックは取らない
@@ -124,7 +129,9 @@ jobs:
             const fs = require('node:fs');
             const marker = '<!-- terraform-plan:prod -->';
             const ok = process.env.PLAN_OUTCOME === 'success';
-            const raw = fs.readFileSync(ok ? 'plan.txt' : 'plan.log', 'utf8');
+            const accountId = process.env.AWS_ACCOUNT_ID;
+            const read = fs.readFileSync(ok ? 'plan.txt' : 'plan.log', 'utf8');
+            const raw = accountId ? read.replaceAll(accountId, '************') : read;
             const limit = 60000;
             const text = raw.length > limit ? `${raw.slice(0, limit)}\n... (truncated, see the workflow log)` : raw;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;

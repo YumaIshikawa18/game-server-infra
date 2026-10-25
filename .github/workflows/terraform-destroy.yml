@@ -18,6 +18,9 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_WORKING_DIR: envs/prod
+  # アカウント ID は個人情報として扱う。値は Secrets から渡し、ログ・PR コメント・Job summary に出さない
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  TF_VAR_allowed_account_ids: '["${{ secrets.AWS_ACCOUNT_ID }}"]'
 
 jobs:
   guard:
@@ -58,13 +61,14 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_APPLY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+          mask-aws-account-id: true
           role-session-name: terraform-destroy-${{ github.run_id }}
 
       - name: terraform init
         env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
         run: terraform -chdir="$TF_WORKING_DIR" init -backend-config="bucket=$TF_STATE_BUCKET"
 
       - name: terraform plan -destroy

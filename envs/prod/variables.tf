@@ -210,3 +210,14 @@ variable "backup_force_destroy" {
   type        = bool
   default     = false
 }
+
+variable "allowed_account_ids" {
+  description = "操作を許可する AWS アカウント ID。個人情報として扱うためリポジトリには書かず、ローカルは *.auto.tfvars、CI は Secrets（AWS_ACCOUNT_ID）から渡す。null ならチェックしない"
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = alltrue([for id in coalesce(var.allowed_account_ids, []) : can(regex("^[0-9]{12}$", id))])
+    error_message = "allowed_account_ids には 12 桁の AWS アカウント ID を指定してください。"
+  }
+}
