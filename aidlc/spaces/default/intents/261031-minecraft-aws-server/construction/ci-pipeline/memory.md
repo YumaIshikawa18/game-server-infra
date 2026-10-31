@@ -1,0 +1,17 @@
+<!-- INVARIANT: examples are single-line HTML comments so a fresh template parses to total=0 (MEMORY_EMPTY). Do NOT un-comment or split across lines. t100 guards this. -->
+> This file is kept up to date automatically while the stage runs. Add observations at the review step, not by editing here directly.
+
+## Interpretations
+- 2026-10-31T18:02:42Z — infra では code-generation / build-and-test が SKIP。本体の不存在を成功として扱わず、CI を先に構成して Environment Provisioning に依存を引き継ぐ。
+<!-- example: 2026-05-29T10:14:32Z — chose REST over GraphQL; the consuming team only needs CRUD, revisit if subscriptions land -->
+
+## Deviations
+- 2026-10-31T18:02:42Z — 本人の Q1 により fork の plan skip を明示的な失敗へ変更。Q2 により bootstrap の静的検査とモックテストを含める。
+<!-- example: 2026-05-29T10:14:32Z — skipped the optional caching layer the stage prose suggested; the dataset is small enough that it adds risk -->
+
+## Tradeoffs
+- 2026-10-31T18:02:42Z — Q3 は文書のみの PR も全チェックを実行する選択。キャッシュや変更パスによる省略は初期構成に入れない。
+<!-- example: 2026-05-29T10:14:32Z — picked TDD over BDD this run; the team is unit-first and the domain is well-understood -->
+
+## Open questions
+<!-- example: 2026-05-29T10:14:32Z — confirm the retention window with compliance before the next stage hardens the schema -->

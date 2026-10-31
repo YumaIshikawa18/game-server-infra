@@ -1,0 +1,94 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [fmt, validate, tflint, checkov, terraform-test, pytest, shellcheck, bats, identifier-check, gitleaks]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Run isolated checks without AWS credentials
+        env:
+          CHECK: ${{ matrix.check }}
+        run: python3 scripts/ci/check.py "$CHECK"
+
+  plan:
+    name: plan
+    needs: checks
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Require a trusted branch and successful checks
+        env:
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+        run: |
+          if [ "$SAME_REPO" != true ] || [ "$DEPENDABOT" = true ]; then
+            echo '::error::AWS plan requires a reviewed branch in this repository, opened by the operator.'
+            exit 1
+          fi
+          if [ "$CHECKS_RESULT" != success ]; then
+            echo '::error::All static checks must pass before AWS plan.'
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read pinned Terraform version
+        id: tools
+        run: |
+          version=$(awk '$1 == "terraform" { print $2 }' .tool-versions)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "terraform=$version" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tools.outputs.terraform }}
+          terraform_wrapper: false
+      - name: Mask configured identifiers
+        env:
+          AWS_PLAN_ROLE_ARN: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_KEY: ${{ secrets.TF_STATE_KEY }}
+          TF_INPUTS_JSON: ${{ secrets.TF_INPUTS_JSON }}
+        run: python3 scripts/ci/plan.py mask
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 900
+          output-env-credentials: true
+      - name: Generate a safe plan summary
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_KEY: ${{ secrets.TF_STATE_KEY }}
+          TF_INPUTS_JSON: ${{ secrets.TF_INPUTS_JSON }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          GH_TOKEN: ${{ github.token }}
+          TF_IN_AUTOMATION: 'true'
+          TF_INPUT: 'false'
+        run: python3 scripts/ci/plan.py run

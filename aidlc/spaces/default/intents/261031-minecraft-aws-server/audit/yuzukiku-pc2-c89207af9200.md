@@ -6667,3 +6667,556 @@
 **Stage**: infrastructure-design
 
 ---
+
+## Session Start
+**Timestamp**: 2026-10-31T17:49:11Z
+**Event**: SESSION_STARTED
+**Source**: startup
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:49:11Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: typed
+**Reply**: command
+**Message Id**: 2effc23c
+
+---
+
+## Workflow Unparked
+**Timestamp**: 2026-10-31T17:49:17Z
+**Event**: WORKFLOW_UNPARKED
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-10-31T17:51:26Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Context**: construction > ci-pipeline > ci-pipeline-questions.md
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-10-31T17:51:30Z
+**Event**: DECISION_RECORDED
+**Stage**: ci-pipeline
+**Decision**: Q1 fork PR の plan 未実行時のマージ防止、Q2 bootstrap の CI 対象範囲、Q3 文書のみの PR の実行範囲
+**Options**: |Q1 A plan を明示的に失敗 / B fork PR をマージ対象外|Q2 A bootstrap の静的検査とモックテストを含む / B bootstrap はすべて手元|Q3 A 全 PR で全チェック / B 変更判定ジョブで文書のみを省略
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:52:31Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: picker
+**Message Id**: b662169c
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T17:52:31Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: fork PR で AWS の plan を実行できない場合、どうマージを防ぎますか？
+**Reply**: None of the above, user_note: fork PRってなに？
+**Options**: ["A. plan を失敗にする (Recommended)","B. fork PR をマージ対象外にする"]
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T17:52:31Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: bootstrap は CI 対象外という方針ですが、静的検査と実リソースを作らないモックテストは CI に含めますか？
+**Reply**: A. 検査とテストを含める (Recommended)
+**Options**: ["A. 検査とテストを含める (Recommended)","B. すべて手元で実行する"]
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T17:52:31Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: 文書だけを変更する PR でも、全チェックを実行しますか？
+**Reply**: A. 全チェックを実行 (Recommended)
+**Options**: ["A. 全チェックを実行 (Recommended)","B. 変更判定で省略する"]
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-10-31T17:52:37Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Context**: construction > ci-pipeline > ci-pipeline-questions.md
+
+---
+
+## Question Answered
+**Timestamp**: 2026-10-31T17:52:37Z
+**Event**: QUESTION_ANSWERED
+**Stage**: ci-pipeline
+**Details**: Q2: A. 検査とテストを含める (Recommended); Q3: A. 全チェックを実行 (Recommended)
+**Message Id**: b662169c
+**Person Reply**: None of the above, user_note: fork PRってなに？\nA. 検査とテストを含める (Recommended)\nA. 全チェックを実行 (Recommended)
+
+---
+
+## Session Resume
+**Timestamp**: 2026-10-31T17:55:40Z
+**Event**: SESSION_RESUMED
+**Source**: resume
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:55:40Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: typed
+**Message Id**: 197b8037
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:56:08Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: typed
+**Message Id**: 4627dab7
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:56:44Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: typed
+**Message Id**: c0f1a718
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:57:25Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: typed
+**Message Id**: 8f417edf
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-10-31T17:57:28Z
+**Event**: DECISION_RECORDED
+**Stage**: ci-pipeline
+**Decision**: Q1 fork PR で AWS の plan を実行できない場合のマージ防止方法
+**Options**: |A. plan を失敗にする (Recommended)|B. fork PR をマージ対象外にする
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:57:41Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: picker
+**Message Id**: 58d13b1c
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T17:57:41Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: 外部の fork から届いた PR で、AWS の plan を実行できない場合の扱いを選んでください。どちらもローカルへのダウンロードは必須ではありません。
+**Reply**: A. plan を失敗にする (Recommended)
+**Options**: ["A. plan を失敗にする (Recommended)","B. fork PR をマージ対象外にする"]
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-10-31T17:57:52Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Context**: construction > ci-pipeline > ci-pipeline-questions.md
+
+---
+
+## Question Answered
+**Timestamp**: 2026-10-31T17:57:53Z
+**Event**: QUESTION_ANSWERED
+**Stage**: ci-pipeline
+**Details**: Q1: A. plan を失敗にする (Recommended)
+**Message Id**: 58d13b1c
+**Person Reply**: A. plan を失敗にする (Recommended)
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-10-31T17:57:54Z
+**Event**: DECISION_RECORDED
+**Stage**: ci-pipeline
+**Decision**: Does this all look correct before I generate the artifact?
+**Options**: Looks correct,Request changes
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T17:58:30Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: picker
+**Message Id**: 4557bda7
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T17:58:31Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: 次の内容で CI の設定と品質基準を作成してよいですか？\n\n- GitHub Actions、master 向け PR、squash merge、11種類の必須チェックを引き継ぎます。\n- 外部の fork PR では AWS に接続せず、plan チェックを明示的に失敗させます。確認して同一リポジトリに取り込んだ別PRで全チェックを通します。ローカルへのダウンロードは必須ではありません。\n- bootstrap の静的検査・モックテストはCIに含め、実環境へのplan・applyは手元だけで実行します。\n- 文書のみの変更でも全チェックを実行します。\n- AWS識別子はSecretsで渡し、公開するplanは件数とリソースアドレスのみとします。planファイルは公開artifactに保存しません。
+**Reply**: Looks correct
+**Options**: ["Looks correct","Request changes"]
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-10-31T17:58:46Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Context**: construction > ci-pipeline > ci-pipeline-questions.md
+
+---
+
+## Summary Confirmation Recorded
+**Timestamp**: 2026-10-31T17:58:46Z
+**Event**: SUMMARY_CONFIRMATION_RECORDED
+**Stage**: ci-pipeline
+**Details**: Looks correct
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Questions SHA-256**: 70575d96818537c2cbb8e9df0a82978de8725c9cc927a3b96a4d9a8b0732d49f
+**Hash Scope**: confirmed-content-v2
+**Message Id**: 4557bda7
+**Person Reply**: Looks correct
+**Summary Authorization Id**: 56be3a371a81b51cde461daba4447a47b42497a7c857b757d4faade709121f9c
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-10-31T18:05:13Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+**Context**: construction > ci-pipeline > ci-config.md
+**Summary Authorization Id**: 56be3a371a81b51cde461daba4447a47b42497a7c857b757d4faade709121f9c
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-10-31T18:05:13Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md
+**Context**: construction > ci-pipeline > quality-gates.md
+**Summary Authorization Id**: 56be3a371a81b51cde461daba4447a47b42497a7c857b757d4faade709121f9c
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-10-31T18:05:14Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/verification/phase-check-construction.md
+**Context**: verification > phase-check-construction.md
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-10-31T18:05:14Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/memory.md
+**Context**: construction > ci-pipeline > memory.md
+**Summary Authorization Id**: 56be3a371a81b51cde461daba4447a47b42497a7c857b757d4faade709121f9c
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:49Z
+**Event**: SENSOR_FIRED
+**Fire id**: 0b27eb83
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:49Z
+**Event**: SENSOR_PASSED
+**Fire id**: 0b27eb83
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+**Duration ms**: 88
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:49Z
+**Event**: SENSOR_FIRED
+**Fire id**: 28f1c7b7
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:49Z
+**Event**: SENSOR_PASSED
+**Fire id**: 28f1c7b7
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md
+**Duration ms**: 96
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:49Z
+**Event**: SENSOR_FIRED
+**Fire id**: 49974cd1
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_PASSED
+**Fire id**: 49974cd1
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Duration ms**: 87
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_FIRED
+**Fire id**: f4ad96fe
+**Sensor ID**: upstream-coverage
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_PASSED
+**Fire id**: f4ad96fe
+**Sensor ID**: upstream-coverage
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+**Duration ms**: 87
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_FIRED
+**Fire id**: 9f1b5298
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_PASSED
+**Fire id**: 9f1b5298
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+**Duration ms**: 89
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_FIRED
+**Fire id**: 2b705102
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_PASSED
+**Fire id**: 2b705102
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md
+**Duration ms**: 90
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_FIRED
+**Fire id**: 17742863
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:50Z
+**Event**: SENSOR_PASSED
+**Fire id**: 17742863
+**Sensor ID**: required-sections
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md
+**Duration ms**: 93
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-10-31T18:05:51Z
+**Event**: SENSOR_FIRED
+**Fire id**: 96a75965
+**Sensor ID**: upstream-coverage
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-10-31T18:05:51Z
+**Event**: SENSOR_PASSED
+**Fire id**: 96a75965
+**Sensor ID**: upstream-coverage
+**Stage slug**: ci-pipeline
+**Output path**: aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md
+**Duration ms**: 90
+
+---
+
+## Stage Awaiting Approval
+**Timestamp**: 2026-10-31T18:05:51Z
+**Event**: STAGE_AWAITING_APPROVAL
+**Stage**: ci-pipeline
+**Next Stage**: deployment-pipeline
+**Brief Digest**: none
+**Sensor State**: required-sections@aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md=passed; required-sections@aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/quality-gates.md=passed; required-sections@aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-pipeline-questions.md=passed; upstream-coverage@aidlc/spaces/default/intents/261031-minecraft-aws-server/construction/ci-pipeline/ci-config.md=passed
+**Open Decisions**: 0
+
+---
+
+## Human Turn
+**Timestamp**: 2026-10-31T18:07:37Z
+**Event**: HUMAN_TURN
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Origin**: person
+**Source**: picker
+**Message Id**: 9d7400e7
+
+---
+
+## Question Replied
+**Timestamp**: 2026-10-31T18:07:38Z
+**Event**: QUESTION_REPLIED
+**Session**: 01a19314-34fc-73b0-825b-3f4fb506033f
+**Question**: CI Pipeline の設定と品質基準を確認してください。どう進めますか？
+**Reply**: Approve
+**Options**: ["Approve","Request Changes"]
+
+---
+
+## Gate Approved
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: GATE_APPROVED
+**Stage**: ci-pipeline
+**User Input**: Approve
+**Person Reply**: Approve
+**Message Id**: 9d7400e7
+**Brief Digest**: none
+
+---
+
+## Stage Completion
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: STAGE_COMPLETED
+**Stage**: ci-pipeline
+**Validation Basis**: {"graphContract":"sha256:cf50c8b2fb3ea7495a9efd09328d978da763aab327fc8fe6b39fae75cdadfcd5","inputs":[{"artifact":"build-and-test-summary","contentHash":"sha256:25674ede46fa1c3862b822e604657fefa4e014948802be52a8cadd84a620f473","instanceCount":1,"presentCount":0,"producer":"build-and-test","required":true,"structureHash":"sha256:b4edeb3e1aac882067113c9d535b797b3bf263d649138a5737cbfa67e8440a19"},{"artifact":"build-test-results","contentHash":"sha256:ecaf4e7c05dbdf1298364a7e38c4a07d38f92968441a3ff14d5b6c6b91e030af","instanceCount":1,"presentCount":0,"producer":"build-and-test","required":true,"structureHash":"sha256:ca469f20e6a36f503494e5b81d3d6df8badecae93c451516b4d87e1faacf39f2"},{"artifact":"code-summary","contentHash":"sha256:66ededabf6f0c21b08f68df3b2a0cf644968e935571cbdea72fe94d9f2ff6456","instanceCount":1,"presentCount":0,"producer":"code-generation","required":true,"structureHash":"sha256:56d8eb71de67d411f61178f2be84f07b5df26c7e30f13c9e5ad7d5b73bfc5763"}],"outputs":[{"artifact":"ci-config","contentHash":"sha256:c67deccc9f608c33daefe9d67ea438e90a1e85019c62d8e46be476e69100d5e7","instanceCount":1,"presentCount":1,"producer":"ci-pipeline","required":true,"structureHash":"sha256:702ad4f9115688696fd9ef9aeb7f00045fec56554e1e4e1a14fd4e1e9d3346b9"},{"artifact":"ci-pipeline-questions","contentHash":"sha256:8b60ebdaaee4f9167cfddde52b856325eff44e9df55b27ef850e23ba41e281a7","instanceCount":1,"presentCount":1,"producer":"ci-pipeline","required":true,"structureHash":"sha256:95a6e642c345a4a69e35a9793b904c9b64632d4be3189e7bdb8646fdd6230a22"},{"artifact":"quality-gates","contentHash":"sha256:b3a09c3680606d534640dc01584519c5bfee31288cfe51f764331e885c7e69f6","instanceCount":1,"presentCount":1,"producer":"ci-pipeline","required":true,"structureHash":"sha256:e364a0f5dde387e255806469c59eb1505c5c9aa511e781e7ff00dfa1caea00a0"}],"projectType":"greenfield","schema":3}
+**Details**: Stage CI Pipeline approved by gate
+**Tokens In**: 8
+**Tokens Out**: 1227
+**Cache Read**: 2901519
+**Cache Write**: 3847
+**Cost USD**: 0.64
+**By Model**: opus-5-5=0.64
+**By Agent**: main=0.64
+**Tokens By Model**: opus-5-5=8/1.2k/2.9M/3.8k
+**Tokens By Agent**: main=8/1.2k/2.9M/3.8k
+
+---
+
+## Phase Completion
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: PHASE_COMPLETED
+**From phase**: construction
+**To phase**: operation
+**Stages completed**: 9
+
+---
+
+## Phase Verification
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: PHASE_VERIFIED
+**Phase boundary**: construction → operation
+
+---
+
+## Phase Start
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: PHASE_STARTED
+**Phase**: operation
+**Scope**: infra
+
+---
+
+## Stage Start
+**Timestamp**: 2026-10-31T18:07:42Z
+**Event**: STAGE_STARTED
+**Stage**: deployment-pipeline
+**Agent**: aidlc-pipeline-deploy-agent
+**Answer Mode**: guide (reused from practices-discovery)
+
+---

@@ -45,8 +45,7 @@ build/
 # Ignore Terraform modules JSON file
 .terraform/modules/modules.json
 
-# Terraform lockfile
-.terraform.lock.hcl
+# Terraform lockfiles are version controlled.
 
 # .tfstate files
 **/*.tfstate
@@ -59,6 +58,11 @@ crash.log
 # password, private keys, and other secrets. These should not be part of version
 # control as they are data points which should only be used for testing changes locally.
 *.auto.tfvars
+*.auto.tfvars.json
+backend.hcl
+.ci-private/
+__pycache__/
+.pytest_cache/
 
 # Ignore override files as they are usually used to override resources locally and so
 # are not checked in
