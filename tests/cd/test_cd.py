@@ -1,0 +1,296 @@
+import copy
+import json
+import os
+import pathlib
+import tempfile
+import unittest
+from unittest import mock
+
+from scripts.cd import common, deploy, operations
+
+
+def plan_fixture():
+  return {'format_version': '1.2', 'terraform_version': '1.17.1',
+      'resource_changes': [{'address': 'module.server.aws_instance.minecraft',
+                  'type': 'aws_instance', 'change': {'actions': ['update'],
+                  'before': {'instance_type': 'old'},
+                  'after': {'instance_type': 'new'}, 'after_unknown': {}}}]}
+
+
+class Digest(unittest.TestCase):
+  def test_identical_values_match(self):
+    value = plan_fixture()
+    self.assertEqual(deploy.digest(value), deploy.digest(copy.deepcopy(value)))
+
+  def test_value_change_with_same_action_is_detected(self):
+    before = plan_fixture()
+    after = copy.deepcopy(before)
+    after['resource_changes'][0]['change']['after']['instance_type'] = 'different'
+    self.assertNotEqual(deploy.digest(before), deploy.digest(after))
+
+  def test_unknown_and_output_changes_are_detected(self):
+    original = plan_fixture()
+    after = copy.deepcopy(original)
+    after['resource_changes'][0]['change']['after_unknown'] = {'id': True}
+    self.assertNotEqual(deploy.digest(original), deploy.digest(after))
+    after = copy.deepcopy(original)
+    after['output_changes'] = {'result': {'after': 'changed'}}
+    self.assertNotEqual(deploy.digest(original), deploy.digest(after))
+
+  def test_timestamp_does_not_change_digest(self):
+    before = plan_fixture()
+    after = copy.deepcopy(before)
+    after['timestamp'] = 'different-time'
+    self.assertEqual(deploy.digest(before), deploy.digest(after))
+
+  def test_key_order_does_not_change_digest(self):
+    before = plan_fixture()
+    self.assertEqual(deploy.digest(before), deploy.digest(dict(reversed(list(before.items())))))
+
+  def test_replacement_under_module_detected(self):
+    value = plan_fixture()
+    value['resource_changes'][0]['change']['actions'] = ['delete', 'create']
+    identity = 'i-' + 'a' * 17
+    value['resource_changes'][0]['change']['before']['id'] = identity
+    self.assertEqual(deploy.replacement_ids(value), [identity])
+
+  def test_replacement_without_identity_rejected(self):
+    value = plan_fixture()
+    value['resource_changes'][0]['change']['actions'] = ['delete', 'create']
+    with self.assertRaises(ValueError):
+      deploy.replacement_ids(value)
+
+
+class Locks(unittest.TestCase):
+  def setUp(self):
+    self.environment = mock.patch.dict(os.environ, {
+      'MC_LOCK_BUCKET': 'example', 'MC_LOCK_KEY': 'control/operation.lock',
+      'GITHUB_RUN_ID': 'test-run', 'GITHUB_RUN_ATTEMPT': '1'})
+    self.environment.start()
+    self.directory = tempfile.TemporaryDirectory(dir=pathlib.Path.cwd())
+    self.root = mock.patch.object(common, 'ROOT', pathlib.Path(self.directory.name))
+    self.root.start()
+
+  def tearDown(self):
+    self.root.stop()
+    self.directory.cleanup()
+    self.environment.stop()
+
+  def test_acquire_and_conditional_release(self):
+    with mock.patch.object(common, 'aws', return_value={'ETag': 'etag'}) as aws:
+      with common.Lock():
+        pass
+    self.assertIn('--if-none-match', aws.call_args_list[0].args)
+    self.assertIn('--if-match', aws.call_args_list[1].args)
+    self.assertEqual(aws.call_args_list[1].args[-1], 'etag')
+
+  def test_conflict_retried_then_acquired(self):
+    with mock.patch.object(common, 'aws', side_effect=[common.AwsError('PreconditionFailed'),
+                {'ETag': 'etag'}, {}]) as aws, mock.patch.object(common.time, 'sleep'):
+      with common.Lock():
+        pass
+    self.assertEqual(aws.call_count, 3)
+
+  def test_lock_timeout_does_not_delete_another_lock(self):
+    with mock.patch.object(common, 'aws', side_effect=common.AwsError('PreconditionFailed')) as aws:
+      with self.assertRaises(TimeoutError):
+        with common.Lock(timeout=0):
+          self.fail('lock must not be acquired')
+    self.assertEqual(aws.call_count, 1)
+
+  def test_access_denied_not_retried(self):
+    with mock.patch.object(common, 'aws', side_effect=common.AwsError('AccessDenied')) as aws:
+      with self.assertRaises(common.AwsError):
+        with common.Lock():
+          pass
+    self.assertEqual(aws.call_count, 1)
+
+  def test_keep_lock_after_uncertain_mutation(self):
+    with (mock.patch.object(common, 'aws', return_value={'ETag': 'etag'}) as aws,
+        mock.patch.object(common, 'summary')):
+      with common.Lock() as lock:
+        lock.keep = True
+    self.assertEqual(aws.call_count, 1)
+
+  def test_state_lock_key_rejected(self):
+    with mock.patch.dict(os.environ, {'MC_LOCK_KEY': 'prod.tfstate.tflock'}):
+      with self.assertRaises(ValueError):
+        common.Lock().__enter__()
+
+
+class Operations(unittest.TestCase):
+  def test_current_instance_discovered_without_stale_secret(self):
+    identity = 'i-' + 'a' * 17
+    with (mock.patch.dict(os.environ, {'MC_INSTANCE_ID': ''}),
+        mock.patch.object(common, 'aws', return_value={
+          'Reservations': [{'Instances': [{'InstanceId': identity}]}]})):
+      self.assertEqual(common.instance_id(), identity)
+
+  def test_ambiguous_instance_discovery_rejected(self):
+    with (mock.patch.dict(os.environ, {'MC_INSTANCE_ID': ''}),
+        mock.patch.object(common, 'aws', return_value={'Reservations': []})):
+      with self.assertRaises(ValueError):
+        common.instance_id()
+
+  def test_start_happy_path(self):
+    lock = mock.Mock()
+    with (mock.patch.object(common, 'instance', return_value={'State': {'Name': 'stopped'}}),
+        mock.patch.object(common, 'instance_id', return_value='example'),
+        mock.patch.object(common, 'aws') as aws,
+        mock.patch.object(common, 'wait_state'), mock.patch.object(common, 'wait_ssm'),
+        mock.patch.object(common, 'health') as health, mock.patch.object(common, 'summary')):
+      operations.start(lock)
+    self.assertEqual(aws.call_args.args[:2], ('ec2', 'start-instances'))
+    health.assert_called_once()
+    self.assertFalse(lock.keep)
+
+  def test_restore_happy_path_leaves_stopped(self):
+    lock = mock.Mock()
+    with (mock.patch.dict(os.environ, {'RESTORE_KEY': 'stop/example.tar.zst'}),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'stopped'}}),
+        mock.patch.object(common, 'instance_id', return_value='example'),
+        mock.patch.object(common, 'aws') as aws, mock.patch.object(common, 'wait_state'),
+        mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send', return_value='command') as send,
+        mock.patch.object(common, 'wait_command'), mock.patch.object(common, 'summary')):
+      operations.restore(lock)
+    send.assert_called_once_with('mc-restore-apply', {'key': ['stop/example.tar.zst']})
+    self.assertEqual(aws.call_args_list[-2].args[:2], ('ec2', 'stop-instances'))
+    self.assertEqual(aws.call_args_list[-1].args[:2], ('ec2', 'delete-tags'))
+    self.assertFalse(lock.keep)
+
+  def test_stop_falls_back_when_ssm_unavailable(self):
+    with (mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'instance_id', return_value='example'),
+        mock.patch.object(common, 'wait_ssm', side_effect=TimeoutError),
+        mock.patch.object(common, 'aws') as aws, mock.patch.object(common, 'wait_state'),
+        mock.patch.object(common, 'notify') as notify):
+      common.stop('manual')
+    self.assertEqual(aws.call_args.args[:2], ('ec2', 'stop-instances'))
+    notify.assert_called_once_with('backup-unavailable', 'warn')
+
+  def test_backup_key(self):
+    self.assertEqual(operations.backup_key('stop/example.tar.zst'), 'stop/example.tar.zst')
+
+  def test_bad_backup_keys(self):
+    for key in ('stop/../world.tar.zst', 'deploy/example.tar.zst',
+          'stop/$(command).tar.zst', 'hourly//world.tar.zst', 'stop/example.zip'):
+      with self.subTest(key=key), self.assertRaises(ValueError):
+        operations.backup_key(key)
+
+  def test_restore_requires_stopped_instance(self):
+    with (mock.patch.dict(os.environ, {'RESTORE_KEY': 'stop/example.tar.zst'}),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'aws') as aws):
+      with self.assertRaises(ValueError):
+        operations.restore(mock.Mock())
+    aws.assert_not_called()
+
+  def test_restore_failure_stops_before_clearing_tag(self):
+    lock = mock.Mock()
+    events = []
+    def aws(*args):
+      events.append(args[1])
+      return {}
+    with (mock.patch.dict(os.environ, {'RESTORE_KEY': 'stop/example.tar.zst'}),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'stopped'}}),
+        mock.patch.object(common, 'instance_id', return_value='example'),
+        mock.patch.object(common, 'aws', side_effect=aws),
+        mock.patch.object(common, 'wait_state', side_effect=lambda *a: events.append('wait-stopped')),
+        mock.patch.object(common, 'wait_ssm', side_effect=TimeoutError)):
+      with self.assertRaises(TimeoutError):
+        operations.restore(lock)
+    self.assertLess(events.index('stop-instances'), events.index('delete-tags'))
+    self.assertEqual(events[-2:], ['wait-stopped', 'delete-tags'])
+    self.assertFalse(lock.keep)
+
+  def test_failed_cleanup_keeps_lock(self):
+    lock = mock.Mock()
+    with (mock.patch.dict(os.environ, {'RESTORE_KEY': 'stop/example.tar.zst'}),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'stopped'}}),
+        mock.patch.object(common, 'instance_id', return_value='example'),
+        mock.patch.object(common, 'aws', side_effect=common.AwsError('AccessDenied'))):
+      with self.assertRaises(common.AwsError):
+        operations.restore(lock)
+    self.assertTrue(lock.keep)
+
+  def test_start_in_restore_mode_rejected(self):
+    with (mock.patch.object(common, 'instance', return_value={
+      'State': {'Name': 'stopped'}, 'Tags': [{'Key': 'mc:mode', 'Value': 'restore'}]}),
+        mock.patch.object(common, 'aws') as aws):
+      with self.assertRaises(ValueError):
+        operations.start(mock.Mock())
+    aws.assert_not_called()
+
+  def test_start_failure_stops_host(self):
+    lock = mock.Mock()
+    with (mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'wait_ssm', side_effect=TimeoutError),
+        mock.patch.object(common, 'stop') as stop):
+      with self.assertRaises(TimeoutError):
+        operations.start(lock)
+    stop.assert_called_once_with('start-failed')
+    self.assertFalse(lock.keep)
+
+
+class Deployment(unittest.TestCase):
+  def test_changed_plan_never_applied(self):
+    with (mock.patch.dict(os.environ, {'EXPECTED_PLAN_DIGEST': 'a' * 64}),
+        mock.patch.object(common, 'require_master'),
+        mock.patch.object(common, 'Lock'), mock.patch.object(common, 'private_work'),
+        mock.patch.object(deploy, 'make_plan', return_value=('unused', plan_fixture())),
+        mock.patch.object(deploy, 'replacement_stop') as stop,
+        mock.patch.object(deploy.ci, 'terraform') as terraform):
+      with self.assertRaises(ValueError):
+        deploy.apply()
+    stop.assert_not_called()
+    terraform.assert_not_called()
+
+  def test_apply_failure_keeps_lock(self):
+    value = plan_fixture()
+    lock = mock.Mock()
+    context = mock.MagicMock()
+    context.__enter__.return_value = lock
+    with (mock.patch.dict(os.environ, {'EXPECTED_PLAN_DIGEST': deploy.digest(value)}),
+        mock.patch.object(common, 'require_master'),
+        mock.patch.object(common, 'Lock', return_value=context),
+        mock.patch.object(common, 'private_work'),
+        mock.patch.object(deploy, 'make_plan', return_value=('unused', value)),
+        mock.patch.object(deploy, 'replacement_stop'),
+        mock.patch.object(deploy.ci, 'terraform', side_effect=RuntimeError),
+        mock.patch.object(deploy, 'smoke') as smoke):
+      with self.assertRaises(RuntimeError):
+        deploy.apply()
+    self.assertTrue(lock.keep)
+    smoke.assert_not_called()
+
+  def test_replacement_never_forces_stop_on_backup_failure(self):
+    value = plan_fixture()
+    identity = 'i-' + 'a' * 17
+    value['resource_changes'][0]['change'].update(actions=['delete', 'create'], before={'id': identity})
+    with (mock.patch.object(common, 'instance_id', return_value=identity),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'wait_ssm', side_effect=TimeoutError),
+        mock.patch.object(common, 'aws') as aws):
+      with self.assertRaises(TimeoutError):
+        deploy.replacement_stop(value)
+    aws.assert_not_called()
+
+  def test_wrong_revision_rejected(self):
+    with (mock.patch.dict(os.environ, {'GITHUB_REF': 'refs/heads/master', 'GITHUB_SHA': 'a' * 40}),
+        mock.patch.object(common.subprocess, 'run', return_value=mock.Mock(stdout=('b' * 40 + '\tmaster').encode()))):
+      with self.assertRaises(ValueError):
+        common.require_master()
+
+  def test_notification_contains_no_instance_or_topic(self):
+    with (mock.patch.dict(os.environ, {'MC_EVENTS_TOPIC_ARN': 'example-topic'}),
+        mock.patch.object(common, 'aws') as aws):
+      common.notify('deployment-failed')
+    args = aws.call_args.args
+    message = args[args.index('--message') + 1]
+    self.assertNotIn('example-topic', message)
+    self.assertNotIn('instance', message)
+    self.assertEqual(json.loads(message)['event'], 'deployment-failed')
+
+
+if __name__ == '__main__':
+  unittest.main()
