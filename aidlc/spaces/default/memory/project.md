@@ -15,6 +15,8 @@
 <!-- This monorepo requires package-scoped branch names and a package owner -->
 <!-- review in addition to the team's normal merge policy. -->
 
+- ALWAYS AI-DLC のフェーズが終わるたびに、作業ブランチ（master 以外）でそのフェーズの記録と成果物をコミットする (learned 2026-10-31) <!-- cid:261031-minecraft-aws-server:infrastructure-design:47b02951048d389dd44695c56acf6ee17cdbac682fe9f57cbf264acae06e3e6b -->
+
 ## Walking Skeleton
 
 <!-- Project-specific specialisation. Example: -->
