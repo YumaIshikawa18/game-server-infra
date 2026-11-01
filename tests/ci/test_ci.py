@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import unittest
+import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -93,6 +94,40 @@ class Summary(unittest.TestCase):
             {'format_version': '1.2', 'deferred_changes': [{}]}):
       with self.assertRaises(ValueError):
         plan.summarize(value)
+
+
+class Diagnostics(unittest.TestCase):
+  def test_runtime_failure_never_includes_exception_text(self):
+    secret = 'arn:aws:iam::' + '987654' + '321098' + ':role/private'
+    with self.assertRaises(plan.PlanFailure) as failure:
+      with plan.step('plan'):
+        raise RuntimeError(secret)
+    self.assertEqual(failure.exception.diagnostic(), 'phase=plan; error=RuntimeError')
+    self.assertNotIn(secret, str(failure.exception))
+    self.assertFalse(check.findings(failure.exception.diagnostic()))
+
+  def test_http_failure_only_includes_status(self):
+    error = urllib.error.HTTPError('https://private.invalid/secret', 403, 'private-message', {}, None)
+    with self.assertRaises(plan.PlanFailure) as failure:
+      with plan.step('pr-comment'):
+        raise error
+    self.assertEqual(failure.exception.diagnostic(), 'phase=pr-comment; error=HTTPError; HTTP 403')
+
+  def test_json_failure_never_includes_input(self):
+    with self.assertRaises(plan.PlanFailure) as failure:
+      with plan.step('show'):
+        plan.json.loads('private-json-input')
+    self.assertEqual(failure.exception.diagnostic(), 'phase=show; error=JSONDecodeError')
+
+  def test_unknown_labels_are_not_printed(self):
+    error = type('private_error_name', (Exception,), {})('private-message')
+    failure = plan.PlanFailure('private-phase', error)
+    self.assertEqual(failure.diagnostic(), 'phase=unknown; error=Unknown')
+
+  def test_successful_step_continues(self):
+    with plan.step('summary'):
+      result = plan.summarize({'format_version': '1.2'})
+    self.assertIn('追加: 0', result)
 
 
 if __name__ == '__main__':

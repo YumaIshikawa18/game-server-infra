@@ -1,6 +1,7 @@
 """plan の生データを出力せず、許可した項目だけを公開する。"""
 
 import collections
+import contextlib
 import json
 import os
 import pathlib
@@ -9,10 +10,35 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKER = '<!-- terraform-plan-summary -->'
+
+
+class PlanFailure(RuntimeError):
+  """公開してよい固定ラベルだけを保持する。例外本文・引数は含めない。"""
+
+  def __init__(self, phase, error):
+    self.phase = phase if phase in ('init', 'plan', 'show', 'summary', 'job-summary', 'pr-comment') else 'unknown'
+    kind = type(error).__name__
+    self.kind = kind if kind in ('RuntimeError', 'ValueError', 'KeyError', 'TypeError',
+      'OSError', 'JSONDecodeError', 'HTTPError', 'URLError', 'TimeoutError') else 'Unknown'
+    self.status = error.code if isinstance(error, urllib.error.HTTPError) and type(error.code) is int and 100 <= error.code <= 599 else None
+    super().__init__('Plan step failed')
+
+  def diagnostic(self):
+    status = f'; HTTP {self.status}' if self.status is not None else ''
+    return f'phase={self.phase}; error={self.kind}{status}'
+
+
+@contextlib.contextmanager
+def step(phase):
+  try:
+    yield
+  except Exception as error:
+    raise PlanFailure(phase, error) from None
 
 
 def required(name):
@@ -156,15 +182,21 @@ def main():
       'bucket': required('TF_STATE_BUCKET'), 'key': required('TF_STATE_KEY'),
       'region': required('AWS_REGION'), 'encrypt': True, 'use_lockfile': True,
     }.items()))
-    terraform(['init', '-input=false', '-lockfile=readonly', f'-backend-config={backend}'])
+    with step('init'):
+      terraform(['init', '-input=false', '-lockfile=readonly', f'-backend-config={backend}'])
     plan = work / 'plan.bin'
-    terraform(['plan', '-input=false', '-no-color', '-lock-timeout=5m',
-           f'-out={plan}'])
-    summary = summarize(json.loads(terraform(['show', '-json', str(plan)])),
-              [*strings(values), required('TF_STATE_BUCKET'), required('TF_STATE_KEY')])
-    with open(required('GITHUB_STEP_SUMMARY'), 'a', encoding='utf-8') as target:
-      target.write(summary)
-    comment(summary)
+    with step('plan'):
+      terraform(['plan', '-input=false', '-no-color', '-lock-timeout=5m',
+             f'-out={plan}'])
+    with step('show'):
+      rendered = json.loads(terraform(['show', '-json', str(plan)]))
+    with step('summary'):
+      summary = summarize(rendered, [*strings(values), required('TF_STATE_BUCKET'), required('TF_STATE_KEY')])
+    with step('job-summary'):
+      with open(required('GITHUB_STEP_SUMMARY'), 'a', encoding='utf-8') as target:
+        target.write(summary)
+    with step('pr-comment'):
+      comment(summary)
   finally:
     shutil.rmtree(work)
 
@@ -172,7 +204,9 @@ def main():
 if __name__ == '__main__':
   try:
     main()
-  except Exception:
+  except Exception as error:
     # 外部 API の例外本文にも識別子が含まれる可能性がある。
     print('::error::Plan or summary publication failed. No raw Terraform output was published.')
+    if isinstance(error, PlanFailure):
+      print('::error::' + error.diagnostic())
     sys.exit(1)
