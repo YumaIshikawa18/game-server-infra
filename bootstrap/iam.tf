@@ -37,6 +37,8 @@ locals {
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = "${local.state_bucket_arn}/${var.state_key}.tflock" },
   ]
   operation_lock = [
+    # ETag を指定した条件付き DeleteObject には GetObject も必要。state 本体とは分離する。
+    { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${local.state_bucket_arn}/${var.lock_key}" },
     {
       Effect    = "Allow", Action = ["s3:PutObject"], Resource = "${local.state_bucket_arn}/${var.lock_key}"
       Condition = { StringEquals = { "s3:if-none-match" = "*", "s3:x-amz-server-side-encryption" = "AES256" } }

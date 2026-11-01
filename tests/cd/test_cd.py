@@ -25,6 +25,26 @@ class Digest(unittest.TestCase):
     value = plan_fixture()
     self.assertEqual(deploy.digest(value), deploy.digest(copy.deepcopy(value)))
 
+  def test_relevant_attribute_enumeration_order_does_not_change_digest(self):
+    first = plan_fixture()
+    first['relevant_attributes'] = [
+      {'resource': 'data.aws_caller_identity.current', 'attribute': ['account_id']},
+      {'resource': 'data.aws_ssm_parameter.ami', 'attribute': ['value']},
+    ]
+    second = copy.deepcopy(first)
+    second['relevant_attributes'].reverse()
+    self.assertEqual(deploy.digest(first), deploy.digest(second))
+
+  def test_relevant_attribute_content_and_path_order_still_change_digest(self):
+    first = plan_fixture()
+    first['relevant_attributes'] = [{'resource': 'aws_instance.example', 'attribute': ['tags', 'Name']}]
+    for changed in ([{'resource': 'aws_instance.other', 'attribute': ['tags', 'Name']}],
+            [{'resource': 'aws_instance.example', 'attribute': ['Name', 'tags']}], []):
+      with self.subTest(changed=changed):
+        second = copy.deepcopy(first)
+        second['relevant_attributes'] = changed
+        self.assertNotEqual(deploy.digest(first), deploy.digest(second))
+
   def test_plan_and_apply_roles_produce_the_same_digest(self):
     # plan と apply は別のロールで plan を作るため、caller identity の arn / user_id が異なる。
     # これらは prior_state にだけ現れ、比較の対象にしない（Codex P1 の確認）。
@@ -252,6 +272,31 @@ class Operations(unittest.TestCase):
 
 
 class Deployment(unittest.TestCase):
+  def test_failure_diagnostics_keep_primary_and_cleanup_steps_without_raw_values(self):
+    raw = 'private-bucket account=123456789012 credential=do-not-print'
+    with (mock.patch.object(sys, 'argv', ['deploy', 'apply']),
+        mock.patch.object(deploy, 'apply') as apply, mock.patch('builtins.print') as output):
+      def fail():
+        try:
+          with deploy.step('approval-comparison'):
+            raise ValueError(raw)
+        except ValueError:
+          with deploy.step('operational-lock'):
+            raise common.AwsError('AccessDenied')
+      apply.side_effect = fail
+      self.assertEqual(deploy.main(), 1)
+    messages = '\n'.join(str(call.args[0]) for call in output.call_args_list)
+    self.assertNotIn(raw, messages)
+    self.assertIn('AccessDenied', messages)
+    self.assertIn('approval-comparison', messages)
+    self.assertIn('operational-lock', messages)
+
+  def test_unknown_diagnostic_attributes_are_not_printed(self):
+    error = common.AwsError('private-value/not-an-error-code')
+    error._deployment_step = 'private-value'
+    self.assertEqual(deploy.diagnostics(error), [
+      {'step': 'unknown', 'kind': 'aws', 'aws_code': 'Unknown'}])
+
   def test_changed_plan_never_applied(self):
     with (mock.patch.dict(os.environ, {'EXPECTED_PLAN_DIGEST': 'a' * 64}),
         mock.patch.object(common, 'require_master'),
