@@ -15,6 +15,7 @@ def load(name):
 
 check = load('check')
 plan = load('plan')
+client_guide = load('client_guide')
 
 
 class Identifiers(unittest.TestCase):
@@ -149,6 +150,44 @@ class Diagnostics(unittest.TestCase):
     self.assertEqual(error.diagnostic(),
       '; aws=Budgets:ListTagsForResource; code=AccessDeniedException; reason=Unknown')
 
+
+class ClientGuide(unittest.TestCase):
+  def settings(self, **changes):
+    mod = {'url': 'https://example.com/mod.jar', 'sha256': '0' * 64, 'version': '1.2.3'}
+    return {'version': '26.3', 'loader': 'fabric', 'loader_version': '0.17.3', 'mods': [
+      {**mod, 'name': 'client-b', 'side': 'client'}, {**mod, 'name': 'client-c', 'side': 'both'},
+      {**mod, 'name': 'client-a', 'side': 'both'}, {**mod, 'name': 'server-only', 'side': 'server'},
+    ], **changes}
+
+  def test_lists_client_mods_and_versions_without_server_only_mods(self):
+    guide = client_guide.render(self.settings())
+    for name in ('client-a', 'client-b', 'client-c'):
+      self.assertIn(f'| {name} | `1.2.3` |', guide)
+    self.assertNotIn('server-only', guide)
+    self.assertIn('| Minecraft | `26.3` |', guide)
+    self.assertIn('Fabric `0.17.3`', guide)
+
+  def test_vanilla_guide_needs_no_loader_or_mods(self):
+    guide = client_guide.render(self.settings(loader='vanilla', loader_version=None, mods=[]))
+    self.assertIn('なし（バニラ）', guide)
+    self.assertNotIn('`mods` フォルダー', guide)
+
+  def test_committed_guide_matches_settings(self):
+    self.assertEqual(client_guide.main(['--check']), 0)
+
+  def test_check_fails_when_guide_differs(self):
+    original = client_guide.render
+    client_guide.render = lambda _settings: 'changed'
+    try:
+      self.assertEqual(client_guide.main(['--check']), 1)
+    finally:
+      client_guide.render = original
+
+
+class RuntimeTags(unittest.TestCase):
+  def test_terraform_ignores_tags_managed_at_runtime(self):
+    source = (ROOT / 'modules/minecraft_server/main.tf').read_text(encoding='utf-8')
+    self.assertIn('ignore_changes = [ami, tags["mc:stopping"], tags["mc:mode"]]', source)
 
 if __name__ == '__main__':
   unittest.main()

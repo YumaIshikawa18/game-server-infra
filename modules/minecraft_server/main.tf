@@ -119,7 +119,8 @@ resource "aws_instance" "minecraft" {
 
   lifecycle {
     # AMI の更新で意図せず置き換えない。置き換えは deploy.yml の保護付きで明示的に行う。
-    ignore_changes = [ami]
+    # mc:stopping と mc:mode はスクリプトと workflow が実行時に付け外しするので、差分にしない。
+    ignore_changes = [ami, tags["mc:stopping"], tags["mc:mode"]]
 
     precondition {
       condition     = contains(data.aws_ec2_instance_type.selected.supported_architectures, var.cpu_architecture)

@@ -13,7 +13,8 @@ AWS 上で Minecraft サーバーを動かすための Terraform 一式です。
 | パス | 役割 |
 |---|---|
 | `bootstrap/` | state バケット、ログバケット、CI 用の IAM ロールと OIDC。手元から適用します |
-| `envs/prod/` | 本番環境のルートモジュール。Minecraft のバージョンや MOD もここで設定します |
+| `envs/prod/` | 本番環境のルートモジュール。Minecraft のバージョンや MOD は `minecraft.json` で設定します |
+| `docs/client-setup.md` | 一緒に遊ぶ人向けのクライアントの準備手順。`minecraft.json` から生成します |
 | `modules/` | `network`、`minecraft_server`、`world_backup`、`notifier`、`watchdog`、`monitoring` |
 | `lambda/` | 通知（`notifier`）と強制停止（`watchdog`）の Lambda |
 | `docker/` | Minecraft サーバーのコンテナ定義 |
@@ -43,6 +44,12 @@ AWS 上で Minecraft サーバーを動かすための Terraform 一式です。
 - プレイヤーが 0 人の状態が 30 分続くと、サーバーは自動で停止します。
 - サーバーが無応答のときや、起動から 12 時間を超えたときも自動で停止します。
 - 変更の戻し方、残った運用ロックの扱い、緊急停止は [Rollback Runbook](aidlc/spaces/default/intents/261031-minecraft-aws-server/operation/deployment-pipeline/rollback-runbook.md) にまとめています。
+
+## Minecraft のバージョンや MOD を変える
+
+1. `envs/prod/minecraft.json` を編集します。Forge などへ切り替えるときは `loader` と `loader_version` も指定します。MOD の項目は `name`、`version`、`url`、`sha256`、`side`（`server`、`client`、`both`）です。
+2. `python3 scripts/ci/client_guide.py` で手順書を更新します。更新を忘れると CI が失敗します。
+3. PR をマージして Deploy を承認し、次の起動から反映します。必要に応じて、一緒に遊ぶ人に [クライアントの準備](docs/client-setup.md) を案内します。
 
 ## 自分の AWS アカウントに作る
 
