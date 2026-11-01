@@ -27,7 +27,7 @@ infra スコープのため、`components.md`（domain-design）と `functional-
 | Amazon S3 | バックアップ（LC6） | BPA、SSE-S3、TLS 強制、バージョニング、ライフサイクル（noncurrent は 7 日、未完了のマルチパートは 7 日で削除）、`prevent_destroy` | バケット名は変数（Secrets） |
 | Amazon S3 | Terraform state（LC1） | bootstrap で作成。BPA、SSE-S3、TLS 強制、バージョニング、`prevent_destroy` | バケット名は Secrets |
 | AWS Systems Manager | Session Manager、Run Command、Parameter Store | Run Command は独自ドキュメント（`mc-stop`、`mc-health-check`、`mc-restore-apply`）を Terraform で作り、ci-ops にはこのドキュメントだけを許可する。SecureString は `aws/ssm` 鍵で暗号化し、手動で登録する | NFR5.2c、NFR6.3 |
-| AWS Lambda | watchdog（LC8）、notifier（LC9） | Python 3.13、arm64、メモリ 128 MB、タイムアウト 30 秒。予約同時実行数 1。ロググループは 14 日保持 | NFR4.11、NFR7.15 |
+| AWS Lambda | watchdog（LC8）、notifier（LC9） | Python 3.13、arm64、メモリ 128 MB、タイムアウト 30 秒。予約枠を設けずアカウントの共有同時実行枠を利用（Deployment Execution Q12で本人が変更を選択）。関数ごとの同時実行数1の保証は設けない。ロググループは 14 日保持 | NFR4.11、NFR7.15 |
 | Amazon EventBridge Scheduler | watchdog の起動 | `rate(5 minutes)` | 無料枠の範囲で動く |
 | Amazon SNS（`events` トピック） | スクリプトとワークフローが送るイベント（独自 JSON、メッセージ属性 `severity` / `event` 付き） | 購読は 2 つ。① notifier Lambda（全件）② メール（属性 `severity` が warn / error のものだけを通すフィルタ）。トピックポリシーで Publish を許可するのは `${prefix}-app-server`、`${prefix}-app-watchdog`、`${prefix}-ci-ops`、`${prefix}-ci-apply` だけ | NFR Design の D2 |
 | Amazon SNS（`alerts` トピック） | CloudWatch アラームと Budgets の通知 | 購読は 2 つ。① notifier Lambda ② メール（フィルタなし。アラームと予算はすべて warn / error 扱い）。トピックポリシーで `cloudwatch.amazonaws.com` と `budgets.amazonaws.com` からの Publish を許可し、`aws:SourceAccount` 条件で自アカウントに限る | アラームと Budgets のメッセージには独自の属性が付かないため、トピックを分ける |

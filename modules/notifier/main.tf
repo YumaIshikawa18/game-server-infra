@@ -127,6 +127,7 @@ data "archive_file" "notifier" {
 }
 
 resource "aws_lambda_function" "notifier" {
+  #checkov:skip=CKV_AWS_115:本人の選択（deployment-execution Q12）で予約枠を使わずアカウントの共有枠を利用する。通知は並行し得るため Discord の 429 は再試行する。
   #checkov:skip=CKV_AWS_116:失敗は CloudWatch Logs に残し、メール購読が独立した経路になる（reliability-design.md §9）。DLQ は置かない。
   #checkov:skip=CKV_AWS_117:VPC 内の資源に触れず、Discord へ直接送るため VPC に置かない。
   #checkov:skip=CKV_AWS_272:個人運用で、コードはこのリポジトリの PR と承認付き apply だけで更新される。署名基盤は置かない。
@@ -141,7 +142,7 @@ resource "aws_lambda_function" "notifier" {
   source_code_hash               = data.archive_file.notifier.output_base64sha256
   memory_size                    = 128
   timeout                        = 30
-  reserved_concurrent_executions = 1
+  reserved_concurrent_executions = -1
 
   environment {
     variables = { WEBHOOK_PARAMETER = var.webhook_parameter_name }

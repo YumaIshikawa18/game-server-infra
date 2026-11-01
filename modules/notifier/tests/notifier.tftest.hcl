@@ -51,8 +51,8 @@ run "routes_notifications" {
     error_message = "notifier は arm64 にしてください。"
   }
   assert {
-    condition     = aws_lambda_function.notifier.reserved_concurrent_executions == 1
-    error_message = "notifier の同時実行は 1 にしてください。"
+    condition     = aws_lambda_function.notifier.reserved_concurrent_executions == -1
+    error_message = "notifier は予約枠を使わず、アカウントの共有同時実行枠を利用してください。"
   }
   assert {
     condition     = aws_lambda_function.notifier.timeout == 30

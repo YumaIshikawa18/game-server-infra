@@ -142,6 +142,24 @@ run "deployment_creation_permissions" {
   }
 }
 
+run "refresh_existing_resources" {
+  command = plan
+
+  assert {
+    condition = alltrue([for policy in [aws_iam_role_policy.plan.policy, aws_iam_policy.apply["reads"].policy] :
+      anytrue([for statement in jsondecode(policy).Statement :
+        contains(tolist(statement.Action), "lambda:ListVersionsByFunction")
+        && try(statement.Resource == "arn:aws:lambda:ap-northeast-1:123456789012:function:example-*", false)
+      ])
+      && anytrue([for statement in jsondecode(policy).Statement :
+        contains(tolist(statement.Action), "s3:ListTagsForResource")
+        && try(statement.Resource == "arn:aws:s3:::example-backup", false)
+      ])
+    ])
+    error_message = "plan と apply は、既存の対象 Lambda のバージョンとバックアップバケットのタグを読み取れるようにしてください。"
+  }
+}
+
 run "operational_lock_permissions" {
   command = plan
 
