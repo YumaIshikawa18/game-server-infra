@@ -100,7 +100,7 @@ run "fabric_loader" {
   variables {
     loader         = "fabric"
     loader_version = "0.17.3"
-    mods           = [{ name = "example-mod", url = "https://example.com/mod.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "both" }]
+    mods           = [{ name = "example-mod", version = "1.0.0", url = "https://example.com/mod.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "both" }]
   }
 
   assert {
@@ -121,10 +121,28 @@ run "reject_loader_without_version" {
   expect_failures = [var.loader_version]
 }
 
+run "reject_mod_without_concrete_version" {
+  command = plan
+  variables {
+    loader         = "fabric"
+    loader_version = "0.17.3"
+    mods           = [{ name = "example-mod", version = "latest", url = "https://example.com/example.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "both" }]
+  }
+  expect_failures = [var.mods]
+}
+
+run "reject_client_mods_on_vanilla" {
+  command = plan
+  variables {
+    mods = [{ name = "example-mod", version = "1.0.0", url = "https://example.com/example.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "client" }]
+  }
+  expect_failures = [var.mods]
+}
+
 run "reject_mods_on_vanilla" {
   command = plan
   variables {
-    mods = [{ name = "example-mod", url = "https://example.com/mod.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "server" }]
+    mods = [{ name = "example-mod", version = "1.0.0", url = "https://example.com/mod.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "server" }]
   }
   expect_failures = [var.mods]
 }

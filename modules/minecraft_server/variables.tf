@@ -143,23 +143,26 @@ variable "loader_version" {
 variable "mods" {
   description = "MOD 一覧。sha256 を照合してから配置する。side=client の MOD はサーバーに置かない。"
   type = list(object({
-    name   = string
-    url    = string
-    sha256 = string
-    side   = string
+    name    = string
+    version = string
+    url     = string
+    sha256  = string
+    side    = string
   }))
   default = []
 
   validation {
     condition = alltrue([for mod in var.mods :
       can(regex("^[A-Za-z0-9._-]{1,64}$", mod.name)) && startswith(mod.url, "https://")
+      && can(regex("^[0-9][0-9A-Za-z.+_-]*$", mod.version))
       && can(regex("^[0-9a-f]{64}$", mod.sha256)) && contains(["server", "client", "both"], mod.side)
     ]) && length(distinct([for mod in var.mods : mod.name])) == length(var.mods)
-    error_message = "MOD は重複しない名前、https の URL、64 桁の sha256、side（server / client / both）を指定してください。"
+    error_message = "MOD は重複しない名前、具体的なバージョン、https の URL、64 桁の sha256、side（server / client / both）を指定してください。"
   }
   validation {
-    condition     = var.loader != "vanilla" || length([for mod in var.mods : mod if mod.side != "client"]) == 0
-    error_message = "vanilla ではサーバーに MOD を置けません。loader を指定してください。"
+    # クライアント専用の MOD にもローダーが必要で、vanilla の手順書では案内できない。
+    condition     = var.loader != "vanilla" || length(var.mods) == 0
+    error_message = "vanilla では MOD を指定できません。loader を指定してください。"
   }
 }
 

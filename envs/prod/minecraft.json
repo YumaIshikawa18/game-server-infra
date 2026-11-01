@@ -1,0 +1,13 @@
+{
+  "version": "26.3",
+  "loader": "vanilla",
+  "loader_version": null,
+  "mods": [],
+  "settings": {
+    "max_players": 10,
+    "view_distance": 10,
+    "simulation_distance": 8,
+    "difficulty": "normal",
+    "motd": "Minecraft"
+  }
+}

@@ -1,20 +1,9 @@
-# 本番環境。ゲームの設定（バージョン・ローダー・MOD・server.properties 相当）は PR で変更する（FR2.1）。
+# 本番環境。ゲームの設定（バージョン・ローダー・MOD・server.properties 相当）は
+# minecraft.json に置き、PR で変更する（FR2.1）。変更したら scripts/ci/client_guide.py で手順書も更新する。
+# MOD の項目は { name, version, url, sha256, side = server | client | both }。sha256 を照合してから配置する。
+# Minecraft 26.3 は Java 25 が必要で、docker/compose.yml のイメージと合わせる。
 locals {
-  minecraft = {
-    # 2026-11-01 時点の最新リリース。Java 25 が必要で、docker/compose.yml のイメージと合わせる。
-    version        = "26.3"
-    loader         = "vanilla"
-    loader_version = null
-    # { name, url, sha256, side = server | client | both }。sha256 を照合してから配置する。
-    mods = []
-    settings = {
-      max_players         = 10
-      view_distance       = 10
-      simulation_distance = 8
-      difficulty          = "normal"
-      motd                = "Minecraft"
-    }
-  }
+  minecraft        = jsondecode(file("${path.module}/minecraft.json"))
   lambda_build_dir = "${path.root}/.build"
 }
 
