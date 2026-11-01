@@ -1,0 +1,42 @@
+name: Stop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stop:
+    if: ${{ github.ref == 'refs/heads/master' && github.actor == vars.OPERATOR_LOGIN }}
+    runs-on: ubuntu-24.04
+    # ロック待ち（最大 5 分）、SSM 待ち、mc-stop（最大 15 分）と停止確認を含める。
+    timeout-minutes: 35
+    environment: ops
+    concurrency:
+      group: minecraft-ops
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_OPS_ROLE_ARN }}
+      MC_LOCK_BUCKET: ${{ secrets.MC_LOCK_BUCKET }}
+      MC_LOCK_KEY: ${{ secrets.MC_LOCK_KEY }}
+      MC_EVENTS_TOPIC_ARN: ${{ secrets.MC_EVENTS_TOPIC_ARN }}
+      OPERATOR_LOGIN: ${{ vars.OPERATOR_LOGIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Mask identifiers
+        run: python3 -m scripts.cd.operations mask
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+      - name: Save, back up and stop Minecraft
+        run: python3 -m scripts.cd.operations stop

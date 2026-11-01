@@ -1,0 +1,2 @@
+# Lambda（watchdog / notifier）の単体テスト用。AWS SDK はテストで差し替えるため入れない。
+pytest==9.1.1

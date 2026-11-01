@@ -1,0 +1,15 @@
+[Unit]
+# ワールド EBS がマウントされていなければ起動しない（ルートディスク上に新しいワールドを作らない）。
+RequiresMountsFor=/srv/minecraft
+Description=Minecraft boot mode (normal or restore)
+Wants=network-online.target
+After=network-online.target mc-deploy-sync.service
+Requires=mc-deploy-sync.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/minecraft/bin/boot-mode.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -45,8 +45,7 @@ build/
 # Ignore Terraform modules JSON file
 .terraform/modules/modules.json
 
-# Terraform lockfile
-.terraform.lock.hcl
+# Terraform lockfiles are version controlled.
 
 # .tfstate files
 **/*.tfstate
@@ -59,6 +58,11 @@ crash.log
 # password, private keys, and other secrets. These should not be part of version
 # control as they are data points which should only be used for testing changes locally.
 *.auto.tfvars
+*.auto.tfvars.json
+backend.hcl
+.ci-private/
+__pycache__/
+.pytest_cache/
 
 # Ignore override files as they are usually used to override resources locally and so
 # are not checked in
@@ -87,3 +91,34 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+# BEGIN AI-DLC:gitignore
+# AI-DLC: local working files
+aidlc/active-space
+aidlc/spaces/*/intents/active-intent
+aidlc/.aidlc-clone-id
+aidlc.settings.local.json
+aidlc/.aidlc-unit-scope.json
+aidlc/.aidlc-unit-parked
+aidlc/.aidlc-claim-generations.json
+aidlc/.aidlc-unit-participant
+aidlc/.aidlc-claim-registry.json
+aidlc/.aidlc-unit-releases/
+aidlc/.aidlc-unit-merges/
+aidlc/.aidlc-active-space-*.tmp
+aidlc/active-memory/
+aidlc/.aidlc-sessions/
+aidlc/.aidlc-request-text/
+aidlc/spaces/*/intents/.aidlc-*
+**/aidlc/spaces/*/intents/**/.aidlc-engine/
+**/aidlc/spaces/*/intents/**/.aidlc-sensors/
+aidlc/spaces/*/knowledge/documentkb/.journal/
+aidlc/spaces/*/knowledge/.sources.local.json
+aidlc/spaces/*/intents/*/runtime-graph.json
+aidlc/spaces/*/intents/*/.aidlc-*
+aidlc/diagnostics/
+.claude/settings.local.json
+# END AI-DLC:gitignore
+
+# Lambda の zip（plan 時に生成）
+.build/

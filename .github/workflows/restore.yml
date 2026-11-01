@@ -1,0 +1,49 @@
+name: Restore
+
+on:
+  # checkov:skip=CKV_GHA_7:ビルド成果物を作らない運用ワークフロー。復元するバックアップのキーは入力が必須で、operations.py と SSM 文書の allowedPattern で形式を検査する。
+  workflow_dispatch:
+    inputs:
+      backup_key:
+        description: 'stop/ または hourly/ 配下の .tar.zst バックアップキー'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    if: ${{ github.ref == 'refs/heads/master' && github.actor == vars.OPERATOR_LOGIN }}
+    runs-on: ubuntu-24.04
+    # 起動・SSM 待ち・復元（SSM 文書の上限 30 分）・停止確認と、ロック待ち（最大 5 分）を含める。
+    timeout-minutes: 50
+    environment: ops
+    concurrency:
+      group: minecraft-ops
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_OPS_ROLE_ARN }}
+      MC_LOCK_BUCKET: ${{ secrets.MC_LOCK_BUCKET }}
+      MC_LOCK_KEY: ${{ secrets.MC_LOCK_KEY }}
+      MC_EVENTS_TOPIC_ARN: ${{ secrets.MC_EVENTS_TOPIC_ARN }}
+      OPERATOR_LOGIN: ${{ vars.OPERATOR_LOGIN }}
+      RESTORE_KEY: ${{ inputs.backup_key }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Mask identifiers
+        run: python3 -m scripts.cd.operations mask
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+      - name: Restore while stopped and leave the instance stopped
+        run: python3 -m scripts.cd.operations restore

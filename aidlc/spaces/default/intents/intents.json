@@ -1,0 +1,10 @@
+[
+  {
+    "uuid": "01a192ba-ebcd-71f2-9dde-f579194ce3a2",
+    "slug": "minecraft-aws-server",
+    "dirName": "261031-minecraft-aws-server",
+    "scope": "infra",
+    "status": "in-flight",
+    "request": "06e5ac77"
+  }
+]
