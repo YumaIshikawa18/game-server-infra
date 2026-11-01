@@ -53,6 +53,8 @@ def test_host_event_keeps_severity_and_posts():
   ('mc-example-backup-failed', 'ALARM', 'error'),
   ('mc-example-disk-high', 'ALARM', 'warn'),
   ('mc-example-backup-failed', 'OK', 'info'),
+  ('mc-example-notifier-errors', 'ALARM', 'error'),
+  ('mc-example-watchdog-errors', 'ALARM', 'error'),
   ('mc-example-other', 'ALARM', 'warn'),
 ])
 def test_alarm_severity_from_name(name, state, severity):

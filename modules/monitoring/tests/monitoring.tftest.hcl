@@ -31,6 +31,28 @@ run "alerts" {
   }
 }
 
+run "lambda_error_alarms" {
+  command = plan
+
+  assert {
+    condition     = toset(keys(aws_cloudwatch_metric_alarm.lambda_errors)) == toset(["notifier", "watchdog"])
+    error_message = "notifier と watchdog の両方を監視してください。"
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.lambda_errors["notifier"].dimensions["FunctionName"] == "example-notifier"
+    error_message = "notifier モジュールの関数名と合わせてください。"
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.lambda_errors["watchdog"].dimensions["FunctionName"] == "example-watchdog"
+    error_message = "watchdog モジュールの関数名と合わせてください。"
+  }
+  assert {
+    condition = alltrue([for _, alarm in aws_cloudwatch_metric_alarm.lambda_errors :
+    alarm.namespace == "AWS/Lambda" && alarm.metric_name == "Errors" && alarm.threshold == 1 && alarm.treat_missing_data == "notBreaching"])
+    error_message = "Lambda の Errors が 1 件以上で発報し、欠測は正常として扱ってください。"
+  }
+}
+
 run "reject_zero_budget" {
   command = plan
   variables { monthly_budget_usd = 0 }
