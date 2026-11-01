@@ -40,7 +40,8 @@ AWS 上で Minecraft サーバーを動かすための Terraform 一式です。
 | Stop | ワールドを保存してバックアップを取り、停止します |
 | Restore | 停止中に、指定したバックアップ（`.tar.zst`）からワールドを復元します。完了後も停止したままです |
 
-- サーバーが無応答のときや、起動から 12 時間を超えたときは、watchdog が自動で停止します。
+- プレイヤーが 0 人の状態が 30 分続くと、サーバーは自動で停止します。
+- サーバーが無応答のときや、起動から 12 時間を超えたときも自動で停止します。
 - 変更の戻し方、残った運用ロックの扱い、緊急停止は [Rollback Runbook](aidlc/spaces/default/intents/261031-minecraft-aws-server/operation/deployment-pipeline/rollback-runbook.md) にまとめています。
 
 ## 自分の AWS アカウントに作る
