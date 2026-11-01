@@ -1,4 +1,6 @@
 [Unit]
+# ワールド EBS がマウントされていなければ起動しない（ルートディスク上に新しいワールドを作らない）。
+RequiresMountsFor=/srv/minecraft
 Description=Minecraft server container
 After=docker.service mod-sync.service
 Requires=docker.service mod-sync.service

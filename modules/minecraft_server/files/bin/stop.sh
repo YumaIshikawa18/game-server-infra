@@ -22,14 +22,23 @@ schedule_instance_stop() {
     /usr/bin/aws ec2 stop-instances --region "$MC_REGION" --instance-ids "$(instance_id)"
 }
 
-# 置き換えの前提が満たせないので停止しない。保存を再開し、停止中の印を戻す。
+STOP_COMMITTED=false
+
+# 停止の予約まで進まずに終了したら（失敗・タイムアウト・予期しない終了のどれでも）、
+# mc:stopping タグと停止中の印を外す。残ると watchdog と health.sh が止まったままになる。
+release_stopping() {
+  if [[ $STOP_COMMITTED != true ]]; then
+    untag_self mc:stopping || log warn "event=untag_failed tag=mc:stopping"
+    rm -f "$MC_STATE_DIR/stopping"
+  fi
+}
+
+# 置き換えの前提が満たせないので停止しない。保存を再開する（タグと印は release_stopping が外す）。
 refuse_stop() {
   local reason=$1 step=$2
   if container_running; then
     rcon save-on >/dev/null || log warn "event=save_on_failed"
   fi
-  untag_self mc:stopping || true
-  rm -f "$MC_STATE_DIR/stopping"
   notify stop_refused error "${step}に失敗したため、置き換え前の停止を中止しました（理由: ${reason}）。"
 }
 
@@ -39,6 +48,9 @@ main() {
     log error "event=stop_rejected reason=invalid_arguments"
     return 2
   fi
+  trap release_stopping EXIT
+  # SSM の実行上限などで強制終了された場合も EXIT trap を通す。
+  trap 'exit 143' TERM INT
   tag_self mc:stopping true || log warn "event=tag_failed tag=mc:stopping"
   # health.sh が停止処理を重ねて呼ばないようにする（/run なので再起動で消える）。
   mkdir -p "$MC_STATE_DIR"
@@ -46,7 +58,7 @@ main() {
   exec 9>"$MC_LOCK_FILE"
   if ! flock -w "$STOP_LOCK_WAIT" 9; then
     log error "event=stop_lock_timeout"
-    rm -f "$MC_STATE_DIR/stopping"
+    notify stop_failed error "ほかの処理がロックを持っていたため、停止を中止しました（理由: ${reason}）。"
     return 1
   fi
   local save_ok=true uploaded=false
@@ -86,8 +98,9 @@ main() {
   else
     notify server_stopping warn "バックアップに失敗しましたが、サーバーを停止します（理由: ${reason}）。"
   fi
-  log info "event=stop_scheduled reason=${reason} backup_ok=${backup_ok}"
   schedule_instance_stop
+  STOP_COMMITTED=true
+  log info "event=stop_scheduled reason=${reason} backup_ok=${backup_ok}"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

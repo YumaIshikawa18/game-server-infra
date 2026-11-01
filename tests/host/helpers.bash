@@ -10,6 +10,8 @@ setup_host() {
   export MC_LOCK_FILE="$MC_ROOT/.lock"
   export MC_LOG_FILE="$BATS_TEST_TMPDIR/log/scripts.log"
   export MC_HOST_ENV="$BATS_TEST_TMPDIR/host.env"
+  # コンテナのルートは常にマウントポイント。マウントされていない場合は各テストで上書きする。
+  export MC_WORLD_MOUNT=/
   export STUB_DIR="$BATS_TEST_TMPDIR/stub"
   export CALLS="$STUB_DIR/calls"
   mkdir -p "$MC_ROOT/data/world" "$MC_STATE_DIR" "$STUB_DIR/bin"

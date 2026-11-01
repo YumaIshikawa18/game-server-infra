@@ -1,4 +1,6 @@
 [Unit]
+# ワールド EBS がマウントされていなければ起動しない（ルートディスク上に新しいワールドを作らない）。
+RequiresMountsFor=/srv/minecraft
 Description=Download and verify Minecraft mods
 After=boot-mode.service
 Requires=boot-mode.service

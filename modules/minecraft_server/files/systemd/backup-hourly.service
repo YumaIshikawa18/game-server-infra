@@ -1,4 +1,6 @@
 [Unit]
+# ワールド EBS がマウントされていなければ起動しない（ルートディスク上に新しいワールドを作らない）。
+RequiresMountsFor=/srv/minecraft
 Description=Hourly Minecraft world backup
 After=minecraft.service
 ConditionPathExists=!/run/minecraft/restore

@@ -1,4 +1,6 @@
 [Unit]
+# ワールド EBS がマウントされていなければ起動しない（ルートディスク上に新しいワールドを作らない）。
+RequiresMountsFor=/srv/minecraft
 Description=Minecraft health check, idle and unresponsive stop
 After=minecraft.service
 ConditionPathExists=!/run/minecraft/restore

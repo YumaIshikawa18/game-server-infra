@@ -155,3 +155,35 @@ setup() {
   [ "$(count_calls 's3api delete-object')" -eq 0 ]
   grep -q 'metric-name BackupFailures --value 1' "$CALLS"
 }
+
+@test "ワールド EBS がマウントされていなければバックアップしない（Codex P1）" {
+  export MC_WORLD_MOUNT="$BATS_TEST_TMPDIR"
+  run "$MC_BIN/backup-hourly.sh"
+  [ "$status" -ne 0 ]
+  [ "$(count_calls 's3api put-object')" -eq 0 ]
+}
+
+@test "stop: ロック待ちがタイムアウトしたら mc:stopping タグを外す（Codex P2）" {
+  export STOP_LOCK_WAIT=1
+  exec 9>"$MC_LOCK_FILE"
+  flock 9
+  run "$MC_BIN/stop.sh" replace true
+  exec 9>&-
+  [ "$status" -eq 1 ]
+  grep -q 'delete-tags .*Key=mc:stopping' "$CALLS"
+  [ ! -e "$MC_STATE_DIR/stopping" ]
+  [ "$(count_calls 'systemd-run')" -eq 0 ]
+}
+
+@test "stop: 置き換えを中止したときも mc:stopping タグを外す" {
+  fail_tar
+  run "$MC_BIN/stop.sh" replace true
+  [ "$status" -eq 1 ]
+  grep -q 'delete-tags .*Key=mc:stopping' "$CALLS"
+}
+
+@test "stop: 停止を予約したら mc:stopping タグは残す" {
+  run "$MC_BIN/stop.sh" manual
+  [ "$status" -eq 0 ]
+  [ "$(count_calls 'delete-tags')" -eq 0 ]
+}

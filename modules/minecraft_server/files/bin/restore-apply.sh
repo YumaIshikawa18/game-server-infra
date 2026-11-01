@@ -31,6 +31,10 @@ main() {
     log error "event=restore_rejected reason=invalid_key"
     return 2
   fi
+  if ! world_mounted; then
+    log error "event=restore_rejected reason=world_not_mounted"
+    return 1
+  fi
   if [[ ! -e $MC_STATE_DIR/restore ]] || container_running; then
     log error "event=restore_rejected reason=not_in_restore_mode"
     return 2

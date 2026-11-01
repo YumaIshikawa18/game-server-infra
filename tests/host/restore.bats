@@ -54,3 +54,11 @@ make_archive() {
   [ "$(cat "$MC_ROOT/data/world/level.dat")" = "level-data" ]
   [ ! -e "$MC_ROOT/data.pre-restore" ]
 }
+
+@test "ワールド EBS がマウントされていなければ復元しない" {
+  make_archive
+  export MC_WORLD_MOUNT="$BATS_TEST_TMPDIR"
+  run "$MC_BIN/restore-apply.sh" stop/20261101-120000.tar.zst
+  [ "$status" -eq 1 ]
+  [ "$(count_calls 'get-object')" -eq 0 ]
+}

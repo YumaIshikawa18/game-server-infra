@@ -33,6 +33,8 @@ upload_world() (
     log error "event=backup_failed kind=${kind} step=$1"
     exit 1
   }
+  # マウントされていないとルートディスク上の空のワールドを保存してしまう。
+  world_mounted || fail world_not_mounted
   started=$(date +%s) || fail clock
   stamp=$(date -u +%Y%m%d-%H%M%S) || fail clock
   key="${kind}/${stamp}.tar.zst"

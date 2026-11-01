@@ -280,6 +280,18 @@ class Deployment(unittest.TestCase):
         deploy.replacement_stop(value)
     aws.assert_not_called()
 
+  def test_replacement_waits_for_the_full_host_stop(self):
+    # mc-stop（900 秒）が終わる前にタイムアウトして apply を中止しない。
+    value = plan_fixture()
+    identity = 'i-' + 'a' * 17
+    value['resource_changes'][0]['change'].update(actions=['delete', 'create'], before={'id': identity})
+    with (mock.patch.object(common, 'instance_id', return_value=identity),
+        mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send', return_value='command'),
+        mock.patch.object(common, 'wait_command') as wait, mock.patch.object(common, 'wait_state')):
+      deploy.replacement_stop(value)
+    self.assertGreater(wait.call_args.kwargs['timeout'], 900)
+
   def test_wrong_revision_rejected(self):
     with (mock.patch.dict(os.environ, {'GITHUB_REF': 'refs/heads/master', 'GITHUB_SHA': 'a' * 40}),
         mock.patch.object(common.subprocess, 'run', return_value=mock.Mock(stdout=('b' * 40 + '\tmaster').encode()))):
@@ -295,6 +307,14 @@ class Deployment(unittest.TestCase):
     self.assertNotIn('example-topic', message)
     self.assertNotIn('instance', message)
     self.assertEqual(json.loads(message)['event'], 'deployment-failed')
+
+  def test_manual_stop_waits_longer_than_host_stop_window(self):
+    # mc-stop（900 秒）と停止予約の後まで待ってから、バックアップなしの停止に切り替える。
+    with (mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
+        mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send'),
+        mock.patch.object(common, 'wait_state') as wait):
+      common.stop('manual')
+    self.assertGreater(wait.call_args.kwargs['timeout'], 900 + 15)
 
   def test_notification_is_recognized_as_workflow_error(self):
     # notifier が独自形式として扱い、error の severity を保つには source が必要。

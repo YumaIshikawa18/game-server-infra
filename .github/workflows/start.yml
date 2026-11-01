@@ -10,7 +10,8 @@ jobs:
   start:
     if: ${{ github.ref == 'refs/heads/master' && github.actor == vars.OPERATOR_LOGIN }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # 起動確認（最大 10 分）に失敗した後の停止処理（最大 20 分）まで含める。
+    timeout-minutes: 50
     environment: ops
     concurrency:
       group: minecraft-ops

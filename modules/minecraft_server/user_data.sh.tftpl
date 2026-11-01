@@ -42,12 +42,19 @@ uuid=$(blkid -s UUID -o value "$device")
 mkdir -p /srv/minecraft
 grep -q "UUID=$uuid" /etc/fstab || echo "UUID=$uuid /srv/minecraft xfs defaults,nofail 0 2" >>/etc/fstab
 mount -a
+mountpoint -q /srv/minecraft || { echo "world volume is not mounted"; exit 1; }
 mkdir -p /srv/minecraft/docker /srv/minecraft/data /srv/minecraft/mods-cache
 
 # イメージのキャッシュもワールド EBS に置き、インスタンスを置き換えても再利用する。
 cat >/etc/docker/daemon.json <<'JSON'
 {"data-root": "/srv/minecraft/docker", "live-restore": false}
 JSON
+# fstab は nofail（EBS がなくても OS と SSM は起動させる）なので、Docker 側でマウントを必須にする。
+mkdir -p /etc/systemd/system/docker.service.d
+cat >/etc/systemd/system/docker.service.d/mc-world.conf <<'UNIT'
+[Unit]
+RequiresMountsFor=/srv/minecraft
+UNIT
 
 cat >/usr/local/sbin/mc-deploy-sync <<'SYNC'
 #!/bin/bash

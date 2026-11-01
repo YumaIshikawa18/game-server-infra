@@ -9,6 +9,8 @@ MC_STATE_DIR=${MC_STATE_DIR:-/run/minecraft}
 MC_LOCK_FILE=${MC_LOCK_FILE:-$MC_ROOT/.lock}
 MC_LOG_FILE=${MC_LOG_FILE:-/var/log/minecraft/scripts.log}
 MC_CONTAINER=${MC_CONTAINER:-mc}
+# ワールド EBS のマウント先。テストでは常にマウントポイントである場所を指定する。
+MC_WORLD_MOUNT=${MC_WORLD_MOUNT:-/srv/minecraft}
 
 if [[ -r $MC_HOST_ENV ]]; then
   # shellcheck source=/dev/null
@@ -93,4 +95,9 @@ tag_self() {
 
 untag_self() {
   aws ec2 delete-tags --region "$MC_REGION" --resources "$(instance_id)" --tags "Key=$1" >/dev/null
+}
+
+# ワールド EBS がマウントされているときだけ 0 を返す。
+world_mounted() {
+  mountpoint -q "$MC_WORLD_MOUNT"
 }

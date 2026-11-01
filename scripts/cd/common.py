@@ -149,6 +149,12 @@ def health(timeout=600):
   raise TimeoutError('Minecraft health check timed out')
 
 
+# modules/minecraft_server/ssm.tf の mc-stop（timeoutSeconds = 900）に、stop.sh の停止予約（15 秒）と
+# EC2 の停止にかかる時間を足した長さ。これより短いと、遅いが正常なバックアップを中断してしまう。
+STOP_COMMAND_TIMEOUT = 900 + 60
+STOP_WAIT_TIMEOUT = 900 + 15 + 285
+
+
 def stop(reason):
   state = instance()['State']['Name']
   if state == 'stopped':
@@ -160,7 +166,7 @@ def stop(reason):
     wait_ssm()
     send('mc-stop', {'reason': [reason]})
     # mc-stop は自インスタンスを停止するので、SSM の応答完了ではなく EC2 を待つ。
-    wait_state('stopped')
+    wait_state('stopped', timeout=STOP_WAIT_TIMEOUT)
   except (AwsError, RuntimeError, TimeoutError):
     aws('ec2', 'stop-instances', '--instance-ids', instance_id())
     wait_state('stopped')
