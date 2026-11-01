@@ -112,7 +112,7 @@ locals {
     { Effect = "Allow", Action = local.bucket_refresh_reads, Resource = local.backup_arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging"], Resource = "${local.backup_arn}/deploy/*" },
     { Effect = "Allow", Action = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:GetInstanceProfile", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListEntitiesForPolicy"], Resource = [local.app_role_arn, "${local.account_arn}:instance-profile/${var.prefix}-app-*", "${local.account_arn}:policy/${var.prefix}-app-*", "arn:${local.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"] },
-    { Effect = "Allow", Action = ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetPolicy", "lambda:ListTags", "lambda:GetFunctionConcurrency", "lambda:ListVersionsByFunction"], Resource = local.app_resources.lambda },
+    { Effect = "Allow", Action = ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetPolicy", "lambda:ListTags", "lambda:GetFunctionConcurrency", "lambda:ListVersionsByFunction", "lambda:GetFunctionCodeSigningConfig"], Resource = local.app_resources.lambda },
     { Effect = "Allow", Action = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"], Resource = local.app_resources.scheduler },
     { Effect = "Allow", Action = ["sns:GetTopicAttributes", "sns:ListTagsForResource", "sns:ListSubscriptionsByTopic"], Resource = local.app_resources.sns },
     { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes"], Resource = local.app_resources.sns },

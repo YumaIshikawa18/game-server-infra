@@ -147,16 +147,18 @@ run "refresh_existing_resources" {
 
   assert {
     condition = alltrue([for policy in [aws_iam_role_policy.plan.policy, aws_iam_policy.apply["reads"].policy] :
-      anytrue([for statement in jsondecode(policy).Statement :
-        contains(tolist(statement.Action), "lambda:ListVersionsByFunction")
-        && try(statement.Resource == "arn:aws:lambda:ap-northeast-1:123456789012:function:example-*", false)
+      alltrue([for action in ["lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:ListVersionsByFunction", "lambda:GetFunctionCodeSigningConfig"] :
+        anytrue([for statement in jsondecode(policy).Statement :
+          contains(tolist(statement.Action), action)
+          && try(statement.Resource == "arn:aws:lambda:ap-northeast-1:123456789012:function:example-*", false)
+        ])
       ])
       && anytrue([for statement in jsondecode(policy).Statement :
         contains(tolist(statement.Action), "s3:ListTagsForResource")
         && try(statement.Resource == "arn:aws:s3:::example-backup", false)
       ])
     ])
-    error_message = "plan と apply は、既存の対象 Lambda のバージョンとバックアップバケットのタグを読み取れるようにしてください。"
+    error_message = "plan と apply は対象 Lambda の設定・同時実行枠・バージョン・署名設定と、バックアップバケットのタグを読み取れるようにしてください。"
   }
 }
 
