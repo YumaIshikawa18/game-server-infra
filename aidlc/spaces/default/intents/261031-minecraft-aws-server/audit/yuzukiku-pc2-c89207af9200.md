@@ -9315,3 +9315,42 @@
 **Summary Authorization Id**: ac69d97ce47574afbed4e66354cabce8248be93c54ff719aaeba1ea5e2d79325
 
 ---
+
+## Human Turn
+**Timestamp**: 2026-11-01T09:31:07Z
+**Event**: HUMAN_TURN
+**Session**: d0f174ac-a0ad-43d0-b8b6-a900d9be4a2e
+**Origin**: person
+**Source**: typed
+**Message Id**: ec9bf23b
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-11-01T09:31:24Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/261031-minecraft-aws-server/operation/deployment-execution/resume-notes.md
+**Context**: operation > deployment-execution > resume-notes.md
+**Summary Authorization Id**: ac69d97ce47574afbed4e66354cabce8248be93c54ff719aaeba1ea5e2d79325
+
+---
+
+## Workflow Parked
+**Timestamp**: 2026-11-01T09:31:28Z
+**Event**: WORKFLOW_PARKED
+**Stage**: deployment-execution
+**Person Reply**: 返信したら、一旦ここまでとする
+**Message Id**: ec9bf23b
+
+---
+
+## Human Turn
+**Timestamp**: 2026-11-01T09:32:09Z
+**Event**: HUMAN_TURN
+**Session**: d0f174ac-a0ad-43d0-b8b6-a900d9be4a2e
+**Origin**: person
+**Source**: typed
+**Message Id**: 81508226
+
+---
