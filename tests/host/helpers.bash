@@ -57,6 +57,8 @@ case "$1" in
   exec)
     shift 2
     if [[ $1 == rcon-cli ]]; then
+      # STUB_RCON_FAIL=1 のときは保存系のコマンド（save-off / save-all）だけを失敗させる。
+      [[ ${STUB_RCON_FAIL:-0} == 1 && $2 == save-* && $2 != save-on ]] && exit 1
       [[ $2 == list ]] && printf 'There are %s of a max of 10 players online:\n' "${STUB_PLAYERS:-0}"
       exit 0
     fi
@@ -102,6 +104,12 @@ backup_keys() {
     done
     printf ']\n'
   } >"$STUB_DIR/list.json"
+}
+
+# tar を失敗させる（ディスク不足や読み取りエラーの代わり）。
+fail_tar() {
+  printf '#!/usr/bin/env bash\nprintf "tar %%s\\n" "$*" >>"$CALLS"\nexit 2\n' >"$STUB_DIR/bin/tar"
+  chmod +x "$STUB_DIR/bin/tar"
 }
 
 count_calls() {

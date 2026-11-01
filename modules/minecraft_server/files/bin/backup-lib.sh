@@ -24,27 +24,37 @@ trim_generations() {
 
 # ワールドを圧縮して S3 に送り、S3 側で計算した SHA-256 と照合する。
 # 成功したらキーを標準出力に出す。RCON の save-off は呼び出し元が管理する。
+# 呼び出し元は `if key=$(upload_world ...)` の形で使うため、Bash の仕様で set -e が効かない。
+# そのため、すべての手順の失敗を明示的に判定し、途中で失敗したら何もアップロードせずに失敗を返す。
 # サブシェルで実行し、失敗時も一時ファイルを残さない（EXIT trap は呼び出し元に影響しない）。
 upload_world() (
-  set -euo pipefail
   local kind=$1 stamp key archive sum remote started size
-  started=$(date +%s)
-  stamp=$(date -u +%Y%m%d-%H%M%S)
+  fail() {
+    log error "event=backup_failed kind=${kind} step=$1"
+    exit 1
+  }
+  started=$(date +%s) || fail clock
+  stamp=$(date -u +%Y%m%d-%H%M%S) || fail clock
   key="${kind}/${stamp}.tar.zst"
-  archive=$(mktemp -p "$MC_ROOT" .backup.XXXXXX)
+  archive=$(mktemp -p "$MC_ROOT" .backup.XXXXXX) || fail tempfile
   # shellcheck disable=SC2064
   trap "rm -f '$archive'" EXIT
-  tar --zstd -C "$MC_ROOT/data" -cf "$archive" .
-  sum=$(openssl dgst -sha256 -binary "$archive" | base64)
+  tar --zstd -C "$MC_ROOT/data" -cf "$archive" . || fail archive
+  [[ -s $archive ]] || fail archive
+  sum=$(set -o pipefail; openssl dgst -sha256 -binary "$archive" | base64) || fail checksum
+  [[ -n $sum ]] || fail checksum
   aws s3api put-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" --body "$archive" \
-    --checksum-sha256 "$sum" --server-side-encryption AES256 >/dev/null
+    --checksum-sha256 "$sum" --server-side-encryption AES256 >/dev/null || fail upload
+  # 照合できなかったオブジェクトは世代として数えられないよう削除する。
+  discard() {
+    aws s3api delete-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" >/dev/null ||
+      log warn "event=backup_discard_failed kind=${kind}"
+    fail "$1"
+  }
   remote=$(aws s3api head-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" \
-    --checksum-mode ENABLED --query ChecksumSHA256 --output text)
-  if [[ $remote != "$sum" ]]; then
-    log error "event=backup_checksum_mismatch kind=${kind}"
-    return 1
-  fi
-  size=$(stat -c %s "$archive")
+    --checksum-mode ENABLED --query ChecksumSHA256 --output text) || discard verify
+  [[ $remote == "$sum" ]] || discard checksum_mismatch
+  size=$(stat -c %s "$archive") || fail size
   metric BackupSizeBytes "$size" Bytes
   metric BackupDurationSeconds "$(($(date +%s) - started))" Seconds
   printf '%s\n' "$key"

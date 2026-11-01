@@ -58,3 +58,10 @@ setup() {
   [ "$status" -eq 0 ]
   [ ! -e "$MC_ROOT/data/mods/removed.jar" ]
 }
+
+@test "ダウンロードに失敗した MOD があれば全体を失敗にする" {
+  printf '[{"name":"missing-mod","url":"https://example.com/missing.jar","sha256":"%064d","side":"server"}]\n' 0 >"$MODS_JSON"
+  run "$MC_BIN/mod-sync.sh"
+  [ "$status" -eq 1 ]
+  [ ! -e "$MC_ROOT/data/mods/missing-mod.jar" ]
+}

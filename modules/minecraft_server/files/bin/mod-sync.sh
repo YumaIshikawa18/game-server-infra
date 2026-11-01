@@ -29,13 +29,14 @@ server_mods() {
 }
 
 # 1 件を取得してキャッシュに入れる。照合に失敗したら一時ファイルを消して失敗する。
+# `fetch_one ... || ...` の形で呼ぶため set -e が効かない。各手順の失敗を明示的に判定する。
 fetch_one() {
   local sum=$1 url=$2 name=$3 target temp actual
   target="$CACHE_DIR/${sum}.jar"
   if [[ -f $target ]] && [[ $(sha256sum "$target" | cut -d' ' -f1) == "$sum" ]]; then
     return 0
   fi
-  temp=$(mktemp -p "$CACHE_DIR" ".download.XXXXXX")
+  temp=$(mktemp -p "$CACHE_DIR" ".download.XXXXXX") || return 1
   if ! curl -fsSL --proto '=https' --max-time 300 --retry 2 -o "$temp" "$url"; then
     rm -f "$temp"
     log error "event=mod_download_failed mod=${name}"
@@ -47,7 +48,11 @@ fetch_one() {
     log error "event=mod_checksum_mismatch mod=${name}"
     return 1
   fi
-  mv "$temp" "$target"
+  if ! mv "$temp" "$target"; then
+    rm -f "$temp"
+    log error "event=mod_cache_failed mod=${name}"
+    return 1
+  fi
 }
 
 # 同時実行を PARALLEL 件までに抑えて全件を取得する。1 件でも失敗したら失敗を返す。

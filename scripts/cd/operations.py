@@ -8,6 +8,9 @@ import time
 from scripts.cd import common
 
 
+# modules/minecraft_server/ssm.tf の mc-restore-apply（timeoutSeconds = 1800）より長くする。
+RESTORE_TIMEOUT = 1800 + 120
+
 def backup_key(value):
   if len(value) > 512 or not re.fullmatch(r'(?:stop|hourly)/[A-Za-z0-9_./-]+\.tar\.zst', value):
     raise ValueError('Select a backup archive under stop/ or hourly/')
@@ -61,7 +64,8 @@ def restore(lock):
     common.aws('ec2', 'start-instances', '--instance-ids', common.instance_id())
     common.wait_state('running')
     common.wait_ssm()
-    common.wait_command(common.send('mc-restore-apply', {'key': [key]}))
+    # SSM 文書の実行上限（1800 秒）より長く待ち、復元の実行中にインスタンスを止めない。
+    common.wait_command(common.send('mc-restore-apply', {'key': [key]}), timeout=RESTORE_TIMEOUT)
   finally:
     # 成否によらず、ホストの停止を確認してから restore タグを解除する。
     common.aws('ec2', 'stop-instances', '--instance-ids', common.instance_id())

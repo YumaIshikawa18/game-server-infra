@@ -16,7 +16,8 @@ jobs:
   restore:
     if: ${{ github.ref == 'refs/heads/master' && github.actor == vars.OPERATOR_LOGIN }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # 起動・SSM 待ち・復元（SSM 文書の上限 30 分）・停止確認と、ロック待ち（最大 5 分）を含める。
+    timeout-minutes: 50
     environment: ops
     concurrency:
       group: minecraft-ops

@@ -2,11 +2,14 @@ import copy
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 from scripts.cd import common, deploy, operations
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def plan_fixture():
@@ -151,9 +154,11 @@ class Operations(unittest.TestCase):
         mock.patch.object(common, 'instance_id', return_value='example'),
         mock.patch.object(common, 'aws') as aws, mock.patch.object(common, 'wait_state'),
         mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send', return_value='command') as send,
-        mock.patch.object(common, 'wait_command'), mock.patch.object(common, 'summary')):
+        mock.patch.object(common, 'wait_command') as wait, mock.patch.object(common, 'summary')):
       operations.restore(lock)
     send.assert_called_once_with('mc-restore-apply', {'key': ['stop/example.tar.zst']})
+    # 復元の実行上限（SSM 文書の 1800 秒）より長く待ってから停止する。
+    self.assertGreater(wait.call_args.kwargs['timeout'], 1800)
     self.assertEqual(aws.call_args_list[-2].args[:2], ('ec2', 'stop-instances'))
     self.assertEqual(aws.call_args_list[-1].args[:2], ('ec2', 'delete-tags'))
     self.assertFalse(lock.keep)
@@ -290,6 +295,18 @@ class Deployment(unittest.TestCase):
     self.assertNotIn('example-topic', message)
     self.assertNotIn('instance', message)
     self.assertEqual(json.loads(message)['event'], 'deployment-failed')
+
+  def test_notification_is_recognized_as_workflow_error(self):
+    # notifier が独自形式として扱い、error の severity を保つには source が必要。
+    sys.path.insert(0, str(ROOT / 'lambda/notifier'))
+    import notifier
+    with (mock.patch.dict(os.environ, {'MC_EVENTS_TOPIC_ARN': 'example-topic'}),
+        mock.patch.object(common, 'aws') as aws):
+      common.notify('start-failed')
+    args = aws.call_args.args
+    message = args[args.index('--message') + 1]
+    self.assertEqual(json.loads(message)['source'], 'workflow')
+    self.assertEqual(notifier.classify(message)[0], 'error')
 
 
 if __name__ == '__main__':

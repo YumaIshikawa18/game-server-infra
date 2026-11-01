@@ -13,19 +13,28 @@ restore_saving() {
   fi
 }
 
+backup_failed() {
+  metric BackupFailures 1
+  notify backup_failed error "毎時バックアップに失敗しました（${1}）。サーバーは稼働を続けます。"
+  return 1
+}
+
 run_backup() {
   local key bytes
   if ! container_running; then
     log info "event=backup_skipped reason=server_not_running"
     return 0
   fi
-  rcon save-off >/dev/null
-  # save-off の後はどこで失敗しても必ず save-on に戻す。
+  # save-off を送った後は、どこで失敗しても必ず save-on に戻す。
   trap restore_saving EXIT
-  rcon save-all flush >/dev/null
+  # 保存できていない状態のアーカイブは、整合が取れないので作らない。
+  if ! rcon save-off >/dev/null || ! rcon save-all flush >/dev/null; then
+    log error "event=backup_failed kind=hourly step=save"
+    backup_failed "ワールドの保存"
+    return 1
+  fi
   if ! key=$(upload_world hourly); then
-    metric BackupFailures 1
-    notify backup_failed error "毎時バックアップに失敗しました。サーバーは稼働を続けます。"
+    backup_failed "圧縮またはアップロード"
     return 1
   fi
   restore_saving

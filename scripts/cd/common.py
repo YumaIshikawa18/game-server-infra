@@ -171,7 +171,8 @@ def notify(event, severity='error'):
   if event not in ('deployment-failed', 'start-failed', 'stop-failed', 'restore-failed', 'backup-unavailable'):
     raise ValueError('Unexpected notification event')
   aws('sns', 'publish', '--topic-arn', required('MC_EVENTS_TOPIC_ARN'),
-    '--message', json.dumps({'event': event, 'severity': severity,
+    # notifier は source が workflow のときだけ独自形式として severity を保つ。
+    '--message', json.dumps({'source': 'workflow', 'event': event, 'severity': severity,
                  'message': 'Minecraft operation requires attention.'}),
     '--message-attributes', json.dumps({key: {'DataType': 'String', 'StringValue': value}
                        for key, value in {'event': event, 'severity': severity}.items()}))
