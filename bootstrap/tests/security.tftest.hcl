@@ -179,8 +179,12 @@ run "refresh_existing_resources" {
         contains(tolist(statement.Action), "s3:ListTagsForResource")
         && try(statement.Resource == "arn:aws:s3:::example-backup", false)
       ])
+      && anytrue([for statement in jsondecode(policy).Statement :
+        contains(tolist(statement.Action), "budgets:ListTagsForResource")
+        && try(statement.Resource == "arn:aws:budgets::123456789012:budget/example-*", false)
+      ])
     ])
-    error_message = "plan と apply は対象 Lambda の設定・同時実行枠・バージョン・署名設定と、バックアップバケットのタグを読み取れるようにしてください。"
+    error_message = "plan と apply は対象 Lambda の設定・同時実行枠・バージョン・署名設定と、対象バケット・予算のタグを読み取れるようにしてください。"
   }
 }
 

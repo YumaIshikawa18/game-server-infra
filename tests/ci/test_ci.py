@@ -143,6 +143,12 @@ class Diagnostics(unittest.TestCase):
     error = plan.TerraformCommandFailure('operation error S3: PrivateIdentifier\nprivate-message')
     self.assertEqual(error.diagnostic(), '; aws=Unknown; code=Unknown; reason=Unknown')
 
+  def test_global_budget_read_failure_has_public_operation_label(self):
+    error = plan.TerraformCommandFailure('operation error Budgets: ListTagsForResource, '
+      'api error AccessDeniedException: private-budget-name')
+    self.assertEqual(error.diagnostic(),
+      '; aws=Budgets:ListTagsForResource; code=AccessDeniedException; reason=Unknown')
+
 
 if __name__ == '__main__':
   unittest.main()

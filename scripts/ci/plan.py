@@ -26,6 +26,7 @@ class TerraformCommandFailure(RuntimeError):
       'S3:PutObject', 'S3:DeleteObject', 'S3:ListObjectsV2', 'S3:GetBucketLocation',
       'Lambda:GetFunction', 'Lambda:GetFunctionCodeSigningConfig', 'Lambda:ListVersionsByFunction',
       'SNS:GetSubscriptionAttributes', 'SSM:GetParameter', 'IAM:GetRole', 'IAM:GetPolicy',
+      'Budgets:ListTagsForResource', 'Budgets:DescribeBudget',
     }
     operations = {service + ':' + operation for service, operation in
       re.findall(r'operation error ([A-Za-z0-9]+): ([A-Za-z0-9]+)', output)}
