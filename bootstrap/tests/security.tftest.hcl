@@ -142,6 +142,28 @@ run "deployment_creation_permissions" {
   }
 }
 
+run "security_group_rule_creation_permissions" {
+  command = plan
+
+  assert {
+    condition = anytrue([for statement in jsondecode(aws_iam_policy.apply["compute"].policy).Statement :
+      try(toset(statement.Action) == toset(["ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress"]), false)
+      && try(statement.Resource == "arn:aws:ec2:ap-northeast-1:123456789012:security-group-rule/*", false)
+      && try(statement.Condition.StringEquals["aws:RequestTag/Project"] == "example", false)
+    ])
+    error_message = "新しい SG ルールの認可には、作成時の Project タグ条件を使ってください。親 SG の既存タグ条件も維持してください。"
+  }
+  assert {
+    condition = anytrue([for statement in jsondecode(aws_iam_policy.apply["compute"].policy).Statement :
+      try(toset(statement.Action) == toset(["ec2:CreateTags"]), false)
+      && try(statement.Resource == "arn:aws:ec2:ap-northeast-1:123456789012:security-group-rule/*", false)
+      && try(toset(statement.Condition.StringEquals["ec2:CreateAction"]) == toset(["AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress"]), false)
+      && try(statement.Condition.StringEquals["aws:RequestTag/Project"] == "example", false)
+    ])
+    error_message = "SG ルールのタグ作成は、同じ Project のルール作成処理だけに限定してください。"
+  }
+}
+
 run "refresh_existing_resources" {
   command = plan
 

@@ -17,6 +17,39 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MARKER = '<!-- terraform-plan-summary -->'
 
 
+class TerraformCommandFailure(RuntimeError):
+  """Terraform の生出力から、公開 API 名と固定の失敗分類だけを取り出す。"""
+
+  def __init__(self, output):
+    known_operations = {
+      'S3:GetObject', 'S3:GetObjectTagging', 'S3:GetObjectAttributes', 'S3:HeadObject',
+      'S3:PutObject', 'S3:DeleteObject', 'S3:ListObjectsV2', 'S3:GetBucketLocation',
+      'Lambda:GetFunction', 'Lambda:GetFunctionCodeSigningConfig', 'Lambda:ListVersionsByFunction',
+      'SNS:GetSubscriptionAttributes', 'SSM:GetParameter', 'IAM:GetRole', 'IAM:GetPolicy',
+    }
+    operations = {service + ':' + operation for service, operation in
+      re.findall(r'operation error ([A-Za-z0-9]+): ([A-Za-z0-9]+)', output)}
+    self.operations = sorted(operations & known_operations)
+    known_codes = ('AccessDenied', 'AccessDeniedException', 'UnauthorizedOperation', 'Forbidden',
+      'InvalidParameterValueException', 'NoSuchBucket', 'NoSuchKey', 'ThrottlingException',
+      'ValidationError', 'InvalidRequest', 'AuthorizationError')
+    self.codes = [code for code in known_codes if re.search(r'\b' + code + r'\b', output)]
+    markers = {
+      'Error acquiring the state lock': 'state-lock', 'Error loading state': 'state-read',
+      'No valid credential sources found': 'credentials', 'Resource cannot be destroyed': 'prevent-destroy',
+      'Invalid value for input variable': 'input-validation', 'Invalid function argument': 'function-argument',
+      'Error in function call': 'function-call', 'Unsupported attribute': 'unsupported-attribute',
+      'Invalid index': 'invalid-index', 'permission denied': 'file-permission',
+    }
+    self.reasons = sorted({label for text, label in markers.items() if text in output})
+    super().__init__('Terraform command failed')
+
+  def diagnostic(self):
+    return ('; aws=' + ','.join(self.operations or ['Unknown'])
+      + '; code=' + ','.join(self.codes or ['Unknown'])
+      + '; reason=' + ','.join(self.reasons or ['Unknown']))
+
+
 class PlanFailure(RuntimeError):
   """公開してよい固定ラベルだけを保持する。例外本文・引数は含めない。"""
 
@@ -24,13 +57,14 @@ class PlanFailure(RuntimeError):
     self.phase = phase if phase in ('init', 'plan', 'show', 'summary', 'job-summary', 'pr-comment') else 'unknown'
     kind = type(error).__name__
     self.kind = kind if kind in ('RuntimeError', 'ValueError', 'KeyError', 'TypeError',
-      'OSError', 'JSONDecodeError', 'HTTPError', 'URLError', 'TimeoutError') else 'Unknown'
+      'OSError', 'JSONDecodeError', 'HTTPError', 'URLError', 'TimeoutError', 'TerraformCommandFailure') else 'Unknown'
     self.status = error.code if isinstance(error, urllib.error.HTTPError) and type(error.code) is int and 100 <= error.code <= 599 else None
+    self.terraform = error.diagnostic() if type(error) is TerraformCommandFailure else ''
     super().__init__('Plan step failed')
 
   def diagnostic(self):
     status = f'; HTTP {self.status}' if self.status is not None else ''
-    return f'phase={self.phase}; error={self.kind}{status}'
+    return f'phase={self.phase}; error={self.kind}{status}{self.terraform}'
 
 
 @contextlib.contextmanager
@@ -122,7 +156,7 @@ def terraform(args):
   result = subprocess.run(['terraform', '-chdir=envs/prod', *args], cwd=ROOT, env=environment,
               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
   if result.returncode != 0:
-    raise RuntimeError('Terraform command failed; inspect locally without publishing raw output')
+    raise TerraformCommandFailure((result.stdout + result.stderr).decode('utf-8', errors='replace'))
   return result.stdout
 
 

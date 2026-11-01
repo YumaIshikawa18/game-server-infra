@@ -34,6 +34,9 @@ locals {
       { Effect = "Allow", Action = ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup", "ec2:CreateFlowLogs"], Resource = "${local.ec2_arn}:vpc/*", Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:CreateNetworkInterface"], Resource = ["${local.ec2_arn}:subnet/*", "${local.ec2_arn}:security-group/*"], Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = local.ec2_mutate_actions, Resource = "${local.ec2_arn}:*/*", Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
+      # 親 SG は既存の ResourceTag、新しいルールは RequestTag で別々に認可する。
+      { Effect = "Allow", Action = ["ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress"], Resource = "${local.ec2_arn}:security-group-rule/*", Condition = { StringEquals = { "aws:RequestTag/Project" = var.prefix } } },
+      { Effect = "Allow", Action = ["ec2:CreateTags"], Resource = "${local.ec2_arn}:security-group-rule/*", Condition = { StringEquals = { "ec2:CreateAction" = ["AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress"], "aws:RequestTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = ["${local.ec2_arn}:instance/*", "${local.ec2_arn}:volume/*"], Condition = { StringEquals = { "aws:RequestTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = ["${local.ec2_arn}:subnet/*", "${local.ec2_arn}:security-group/*", "${local.ec2_arn}:network-interface/*"], Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = "arn:${local.partition}:ec2:${var.region}::image/*" },

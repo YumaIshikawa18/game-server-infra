@@ -129,6 +129,20 @@ class Diagnostics(unittest.TestCase):
       result = plan.summarize({'format_version': '1.2'})
     self.assertIn('追加: 0', result)
 
+  def test_terraform_failure_only_exposes_known_api_and_error_labels(self):
+    private = 'arn:aws:iam::' + '987654' + '321098' + ':role/private-role'
+    error = plan.TerraformCommandFailure('Error acquiring the state lock: operation error S3: PutObject, '
+      'api error AccessDenied: ' + private)
+    failure = plan.PlanFailure('plan', error)
+    self.assertEqual(failure.diagnostic(),
+      'phase=plan; error=TerraformCommandFailure; aws=S3:PutObject; code=AccessDenied; reason=state-lock')
+    self.assertNotIn(private, str(error))
+    self.assertFalse(check.findings(failure.diagnostic()))
+
+  def test_terraform_failure_drops_unknown_operation_names_and_values(self):
+    error = plan.TerraformCommandFailure('operation error S3: PrivateIdentifier\nprivate-message')
+    self.assertEqual(error.diagnostic(), '; aws=Unknown; code=Unknown; reason=Unknown')
+
 
 if __name__ == '__main__':
   unittest.main()
