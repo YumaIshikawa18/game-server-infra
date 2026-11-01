@@ -58,6 +58,7 @@ data "archive_file" "watchdog" {
 }
 
 resource "aws_lambda_function" "watchdog" {
+  #checkov:skip=CKV_AWS_115:本人の選択（deployment-execution Q12）で予約枠を使わずアカウントの共有枠を利用する。5 分間隔・最大 30 秒で実行し、対象は管理タグ付き EC2 だけに限定する。
   #checkov:skip=CKV_AWS_116:5 分ごとに起動し直すため、失敗した回は次の回が補う。DLQ は置かない。
   #checkov:skip=CKV_AWS_117:AWS API だけを呼ぶため VPC に置かない（NAT なしの構成）。
   #checkov:skip=CKV_AWS_272:個人運用で、コードはこのリポジトリの PR と承認付き apply だけで更新される。署名基盤は置かない。
@@ -72,7 +73,7 @@ resource "aws_lambda_function" "watchdog" {
   source_code_hash               = data.archive_file.watchdog.output_base64sha256
   memory_size                    = 128
   timeout                        = 30
-  reserved_concurrent_executions = 1
+  reserved_concurrent_executions = -1
 
   environment {
     variables = {

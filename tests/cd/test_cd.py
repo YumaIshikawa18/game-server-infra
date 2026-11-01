@@ -346,9 +346,10 @@ class Deployment(unittest.TestCase):
     value['resource_changes'][0]['change'].update(actions=['delete', 'create'], before={'id': identity})
     with (mock.patch.object(common, 'instance_id', return_value=identity),
         mock.patch.object(common, 'instance', return_value={'State': {'Name': 'running'}}),
-        mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send', return_value='command'),
+        mock.patch.object(common, 'wait_ssm'), mock.patch.object(common, 'send', return_value='command') as send,
         mock.patch.object(common, 'wait_command') as wait, mock.patch.object(common, 'wait_state')):
       deploy.replacement_stop(value)
+    send.assert_called_once_with('mc-stop', {'reason': ['replace'], 'requireBackup': ['true']})
     self.assertGreater(wait.call_args.kwargs['timeout'], 900)
 
   def test_wrong_revision_rejected(self):

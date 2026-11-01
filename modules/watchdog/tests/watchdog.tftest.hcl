@@ -54,8 +54,8 @@ run "external_stop" {
     error_message = "watchdog が止められるのは管理タグ付きのインスタンスだけにしてください。"
   }
   assert {
-    condition     = aws_lambda_function.watchdog.reserved_concurrent_executions == 1
-    error_message = "watchdog の同時実行は 1 にしてください。"
+    condition     = aws_lambda_function.watchdog.reserved_concurrent_executions == -1
+    error_message = "watchdog は予約枠を使わず、アカウントの共有同時実行枠を利用してください。"
   }
   assert {
     condition     = aws_lambda_function.watchdog.environment[0].variables["PROJECT_TAG"] == "example"

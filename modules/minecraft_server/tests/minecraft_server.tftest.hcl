@@ -64,6 +64,20 @@ run "secure_host" {
     error_message = "SSM 文書 3 つを作り、引数は形式を検査してください。"
   }
   assert {
+    condition = alltrue(flatten([for _, document in aws_ssm_document.operation :
+      [for name in keys(jsondecode(document.content).parameters) : can(regex("^[A-Za-z0-9]+$", name))]
+    ]))
+    error_message = "SSM 文書のパラメータ名は英数字だけにしてください。"
+  }
+  assert {
+    condition = (
+      toset(jsondecode(aws_ssm_document.operation["mc-stop"].content).parameters.requireBackup.allowedValues) == toset(["true", "false"])
+      && jsondecode(aws_ssm_document.operation["mc-stop"].content).parameters.requireBackup.default == "false"
+      && strcontains(aws_ssm_document.operation["mc-stop"].content, "'{{ requireBackup }}'")
+    )
+    error_message = "置換前のバックアップ必須指定を停止スクリプトに渡せるようにしてください。"
+  }
+  assert {
     condition     = strcontains(aws_s3_object.deploy["minecraft.env"].content, "MEMORY=12G\n") && strcontains(aws_s3_object.deploy["minecraft.env"].content, "VERSION=26.3\n") && strcontains(aws_s3_object.deploy["minecraft.env"].content, "ENFORCE_WHITELIST=TRUE\n") && strcontains(aws_s3_object.deploy["minecraft.env"].content, "ONLINE_MODE=TRUE\n")
     error_message = "ヒープはメモリの 75%、バージョン固定、online-mode と whitelist の強制を設定してください。"
   }

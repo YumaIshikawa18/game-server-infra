@@ -5,10 +5,10 @@ locals {
     "mc-stop" = {
       timeout = 900
       parameters = {
-        reason         = { type = "String", description = "Stop reason.", allowedPattern = "^(manual|idle|unresponsive|replace|start-failed)$" }
-        require_backup = { type = "String", description = "Refuse to stop unless the backup succeeds.", allowedValues = ["true", "false"], default = "false" }
+        reason        = { type = "String", description = "Stop reason.", allowedPattern = "^(manual|idle|unresponsive|replace|start-failed)$" }
+        requireBackup = { type = "String", description = "Refuse to stop unless the backup succeeds.", allowedValues = ["true", "false"], default = "false" }
       }
-      command = "/opt/minecraft/bin/stop.sh '{{ reason }}' '{{ require_backup }}'"
+      command = "/opt/minecraft/bin/stop.sh '{{ reason }}' '{{ requireBackup }}'"
     }
     "mc-health-check" = {
       timeout    = 60

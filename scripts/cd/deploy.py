@@ -107,7 +107,7 @@ def replacement_stop(plan):
     state = common.instance()['State']['Name']
     if state == 'running':
       common.wait_ssm()
-      command = common.send('mc-stop', {'reason': ['replace'], 'require_backup': ['true']})
+      command = common.send('mc-stop', {'reason': ['replace'], 'requireBackup': ['true']})
       common.wait_command(command, timeout=common.STOP_COMMAND_TIMEOUT)
       common.wait_state('stopped', timeout=300)
     elif state != 'stopped':
