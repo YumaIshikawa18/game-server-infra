@@ -25,6 +25,20 @@ class Digest(unittest.TestCase):
     value = plan_fixture()
     self.assertEqual(deploy.digest(value), deploy.digest(copy.deepcopy(value)))
 
+  def test_plan_and_apply_roles_produce_the_same_digest(self):
+    # plan と apply は別のロールで plan を作るため、caller identity の arn / user_id が異なる。
+    # これらは prior_state にだけ現れ、比較の対象にしない（Codex P1 の確認）。
+    def with_caller(arn):
+      value = plan_fixture()
+      value['prior_state'] = {'values': {'root_module': {'resources': [{
+        'address': 'data.aws_caller_identity.current', 'mode': 'data', 'type': 'aws_caller_identity',
+        'values': {'account_id': '123456789012', 'arn': arn, 'id': '123456789012', 'user_id': arn[-8:]}}]}}}
+      value['relevant_attributes'] = [{'resource': 'data.aws_caller_identity.current', 'attribute': ['account_id']}]
+      return value
+    plan_role = with_caller('arn:aws:sts::123456789012:assumed-role/example-ci-plan/run-1')
+    apply_role = with_caller('arn:aws:sts::123456789012:assumed-role/example-ci-apply/run-2')
+    self.assertEqual(deploy.digest(plan_role), deploy.digest(apply_role))
+
   def test_value_change_with_same_action_is_detected(self):
     before = plan_fixture()
     after = copy.deepcopy(before)

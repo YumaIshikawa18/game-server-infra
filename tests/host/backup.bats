@@ -219,3 +219,19 @@ STUB
   grep -q 'delete-object .*--key stop/' "$CALLS"
   [ "$(count_calls 'systemd-run')" -eq 0 ]
 }
+
+@test "hourly: タイムアウトで強制終了されても save-on に戻す（Codex P2）" {
+  cat >"$STUB_DIR/bin/aws" <<'STUB'
+#!/usr/bin/env bash
+printf 'aws %s\n' "$*" >>"$CALLS"
+if [[ "$1 $2" == "s3 cp" ]]; then
+  pkill -TERM -f 'files/bin/backup-hourly.sh'
+  sleep 1
+fi
+exit 0
+STUB
+  chmod +x "$STUB_DIR/bin/aws"
+  run "$MC_BIN/backup-hourly.sh"
+  [ "$status" -eq 143 ]
+  [ "$(count_calls 'rcon-cli save-on')" -ge 1 ]
+}

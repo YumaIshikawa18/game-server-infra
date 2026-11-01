@@ -26,7 +26,9 @@ run_backup() {
     return 0
   fi
   # save-off を送った後は、どこで失敗しても必ず save-on に戻す。
+  # systemd の TimeoutStartSec による SIGTERM でも EXIT trap を通るよう、TERM / INT を通常の終了にする。
   trap restore_saving EXIT
+  trap 'exit 143' TERM INT
   # 保存できていない状態のアーカイブは、整合が取れないので作らない。
   if ! rcon save-off >/dev/null || ! rcon save-all flush >/dev/null; then
     log error "event=backup_failed kind=hourly step=save"
