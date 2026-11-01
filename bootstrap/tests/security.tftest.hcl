@@ -92,6 +92,56 @@ run "least_privilege" {
   }
 }
 
+run "deployment_creation_permissions" {
+  command = plan
+
+  assert {
+    condition = alltrue([for action in ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup", "ec2:CreateFlowLogs"] :
+      anytrue([for statement in jsondecode(aws_iam_policy.apply["compute"].policy).Statement :
+        contains(tolist(statement.Action), action)
+        && try(statement.Resource == "arn:aws:ec2:ap-northeast-1:123456789012:vpc/*", false)
+        && try(statement.Condition.StringEquals["ec2:ResourceTag/Project"] == "example", false)
+      ])
+    ])
+    error_message = "VPC 配下の作成には、同じ Project の親 VPC の認可も必要です。"
+  }
+  assert {
+    condition = anytrue([for statement in jsondecode(aws_iam_policy.apply["compute"].policy).Statement :
+      contains(tolist(statement.Action), "ec2:CreateNetworkInterface")
+      && try(toset(statement.Resource) == toset(["arn:aws:ec2:ap-northeast-1:123456789012:subnet/*", "arn:aws:ec2:ap-northeast-1:123456789012:security-group/*"]), false)
+      && try(statement.Condition.StringEquals["ec2:ResourceTag/Project"] == "example", false)
+    ])
+    error_message = "ENI 作成の親 subnet と SG は同じ Project に限定してください。"
+  }
+  assert {
+    condition = alltrue([for statement in jsondecode(aws_iam_policy.apply["compute"].policy).Statement :
+      length(setintersection(toset(statement.Action), toset(local.ec2_create_actions))) == 0
+      || try(statement.Condition.StringEquals["aws:RequestTag/Project"] == "example", false)
+      || try(statement.Condition.StringEquals["ec2:ResourceTag/Project"] == "example", false)
+    ])
+    error_message = "EC2 の作成は新規または既存リソースの Project 条件を必須にしてください。"
+  }
+  assert {
+    condition = anytrue([for statement in jsondecode(aws_iam_policy.apply["storage"].policy).Statement :
+      contains(tolist(statement.Action), "s3:TagResource")
+      && try(statement.Resource == "arn:aws:s3:::example-backup", false)
+    ])
+    error_message = "タグ付きバケット作成の TagResource はバックアップバケットだけに許可してください。"
+  }
+  assert {
+    condition = alltrue([for policy in [aws_iam_role_policy.plan.policy, aws_iam_policy.apply["reads"].policy, aws_iam_policy.apply["services"].policy] :
+      anytrue([for statement in jsondecode(policy).Statement :
+        contains(tolist(statement.Action), "sns:GetSubscriptionAttributes")
+        && try(statement.Resource == "arn:aws:sns:ap-northeast-1:123456789012:example-*", false)
+      ])
+      ]) && alltrue([for statement in jsondecode(aws_iam_policy.apply["services"].policy).Statement :
+      length(setintersection(toset(statement.Action), toset(["sns:SetSubscriptionAttributes", "sns:Unsubscribe"]))) == 0
+      || try(statement.Resource == "arn:aws:sns:ap-northeast-1:123456789012:example-*", false)
+    ])
+    error_message = "SNS の購読操作の IAM Resource は購読 ARN ではなく対象 topic ARN にしてください。"
+  }
+}
+
 run "operational_lock_permissions" {
   command = plan
 

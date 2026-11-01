@@ -114,7 +114,7 @@ locals {
     { Effect = "Allow", Action = ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetPolicy", "lambda:ListTags", "lambda:GetFunctionConcurrency"], Resource = local.app_resources.lambda },
     { Effect = "Allow", Action = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"], Resource = local.app_resources.scheduler },
     { Effect = "Allow", Action = ["sns:GetTopicAttributes", "sns:ListTagsForResource", "sns:ListSubscriptionsByTopic"], Resource = local.app_resources.sns },
-    { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes"], Resource = "${local.app_resources.sns}:*" },
+    { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes"], Resource = local.app_resources.sns },
     { Effect = "Allow", Action = ["budgets:ViewBudget"], Resource = "arn:${local.partition}:budgets::${local.account_id}:budget/${var.prefix}-*" },
     { Effect = "Allow", Action = ["ssm:DescribeDocumentPermission"], Resource = local.app_resources.document },
   ]

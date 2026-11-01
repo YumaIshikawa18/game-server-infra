@@ -30,6 +30,9 @@ locals {
     ])
     compute = concat([local.read_statement], [
       { Effect = "Allow", Action = local.ec2_create_actions, Resource = "${local.ec2_arn}:*/*", Condition = { StringEquals = { "aws:RequestTag/Project" = var.prefix } } },
+      # 作成対象の RequestTag は、既存の親 VPC / subnet / SG の認可には渡らない。
+      { Effect = "Allow", Action = ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup", "ec2:CreateFlowLogs"], Resource = "${local.ec2_arn}:vpc/*", Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
+      { Effect = "Allow", Action = ["ec2:CreateNetworkInterface"], Resource = ["${local.ec2_arn}:subnet/*", "${local.ec2_arn}:security-group/*"], Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = local.ec2_mutate_actions, Resource = "${local.ec2_arn}:*/*", Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = ["${local.ec2_arn}:instance/*", "${local.ec2_arn}:volume/*"], Condition = { StringEquals = { "aws:RequestTag/Project" = var.prefix } } },
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = ["${local.ec2_arn}:subnet/*", "${local.ec2_arn}:security-group/*", "${local.ec2_arn}:network-interface/*"], Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
@@ -50,7 +53,7 @@ locals {
       { Effect = "Allow", Action = ["iam:PassRole"], Resource = "${local.account_arn}:role/${var.prefix}-app-scheduler", Condition = { StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" } } },
     ]
     storage = [
-      { Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketTagging", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketLocation", "s3:ListBucket", "s3:PutBucketLogging", "s3:GetBucketLogging", "s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls"], Resource = local.backup_arn },
+      { Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketTagging", "s3:TagResource", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketLocation", "s3:ListBucket", "s3:PutBucketLogging", "s3:GetBucketLogging", "s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls"], Resource = local.backup_arn },
       { Effect = "Allow", Action = local.bucket_refresh_reads, Resource = local.backup_arn },
       { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectTagging", "s3:PutObjectTagging"], Resource = "${local.backup_arn}/deploy/*" },
     ]
@@ -62,7 +65,7 @@ locals {
       { Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource"], Resource = local.app_resources.logs },
       { Effect = "Allow", Action = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"], Resource = "arn:${local.partition}:cloudwatch:${var.region}:${local.account_id}:alarm:${var.prefix}-*" },
       { Effect = "Allow", Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:ListTagsForResource", "sns:TagResource", "sns:UntagResource", "sns:Subscribe", "sns:ListSubscriptionsByTopic"], Resource = local.app_resources.sns },
-      { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes", "sns:SetSubscriptionAttributes", "sns:Unsubscribe"], Resource = "${local.app_resources.sns}:*" },
+      { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes", "sns:SetSubscriptionAttributes", "sns:Unsubscribe"], Resource = local.app_resources.sns },
       { Effect = "Allow", Action = ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:ListVersionsByFunction", "lambda:GetPolicy", "lambda:AddPermission", "lambda:RemovePermission", "lambda:GetFunctionConcurrency", "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency", "lambda:ListTags", "lambda:TagResource", "lambda:UntagResource"], Resource = local.app_resources.lambda },
       { Effect = "Allow", Action = ["scheduler:CreateSchedule", "scheduler:GetSchedule", "scheduler:UpdateSchedule", "scheduler:DeleteSchedule", "scheduler:ListTagsForResource"], Resource = local.app_resources.scheduler },
       { Effect = "Allow", Action = ["budgets:ModifyBudget", "budgets:ViewBudget", "budgets:TagResource", "budgets:UntagResource", "budgets:ListTagsForResource"], Resource = "arn:${local.partition}:budgets::${local.account_id}:budget/${var.prefix}-*" },
