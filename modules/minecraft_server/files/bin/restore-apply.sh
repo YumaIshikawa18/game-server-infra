@@ -31,6 +31,13 @@ main() {
     log error "event=restore_rejected reason=invalid_key"
     return 2
   fi
+  # SSM Online はホストの起動完了を意味しない。oneshot の start は既存の起動ジョブに合流し、
+  # deploy-sync とワールドのマウントを含む boot-mode の完了まで待つ（--no-block は使わない）。
+  # SSM 文書の全体上限 1800 秒のうち、初期化の待機には最大 180 秒だけ使う。
+  if ! timeout --kill-after=5s 180 systemctl start boot-mode.service >/dev/null 2>&1; then
+    log error "event=restore_rejected reason=boot_mode_not_ready"
+    return 1
+  fi
   if ! world_mounted; then
     log error "event=restore_rejected reason=world_not_mounted"
     return 1

@@ -96,6 +96,21 @@ STUB
 #!/usr/bin/env bash
 printf 'systemd-run %s\n' "$*" >>"$CALLS"
 STUB
+  cat >"$STUB_DIR/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >>"$CALLS"
+[[ ${STUB_BOOT_FAIL:-0} == 1 ]] && exit 1
+if [[ ${STUB_BOOT_DELAY:-0} != 0 ]]; then
+  sleep "$STUB_BOOT_DELAY"
+  : >"$MC_STATE_DIR/restore"
+fi
+STUB
+  cat >"$STUB_DIR/bin/timeout" <<'STUB'
+#!/usr/bin/env bash
+printf 'timeout %s\n' "$*" >>"$CALLS"
+[[ ${STUB_BOOT_TIMEOUT:-0} == 1 ]] && exit 124
+exec /usr/bin/timeout "$@"
+STUB
   chmod +x "$STUB_DIR"/bin/*
 }
 
