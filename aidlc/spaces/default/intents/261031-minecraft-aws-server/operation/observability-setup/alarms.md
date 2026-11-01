@@ -11,6 +11,8 @@
 | `backup-failed` | `BackupFailures` の合計が 1 以上（5 分、1 回） | error | `alerts` → Discord とメール |
 | `disk-high` | `disk_used_percent` が 80 以上（5 分、3 回連続） | warn | `alerts` → Discord とメール |
 | `backup-bucket-large` | `BackupBucketBytes` が 80 GiB 以上（1 時間、1 回） | warn | `alerts` → Discord とメール |
+| `notifier-errors` | Lambda `notifier` の `Errors` が 1 以上（5 分、1 回） | error | `alerts` → メール（notifier が動けば Discord にも） |
+| `watchdog-errors` | Lambda `watchdog` の `Errors` が 1 以上（5 分、1 回） | error | `alerts` → Discord とメール |
 
 ## その他の通知
 
@@ -33,12 +35,14 @@
 | 毎時バックアップ | S3 の `hourly/` を確認 | **成功**。13:00:22Z に 1 件保存、約 126 MiB |
 | 自動停止の通知 | notifier の実行ログを確認 | 13:29:42Z に実行され、エラーログは 0 件。本人が承認時に Discord での受信も問題なしと回答 |
 | アラームの状態 | 確認の後に取得 | 3 件すべて `OK` |
+| Restore | `stop/` の最新バックアップを指定して実行（run 41316128789） | **成功**。実行後は停止状態で、`mc:mode` タグも解除済み |
+| Start | 復元後に実行（run 41316296219） | **成功**。約 1 分で起動 |
+| 復元後の接続 | 本人が Minecraft クライアントで接続 | **成功**。復元前と同じワールドを確認 |
 
 ## 確認していないこと
 
-Q1 の範囲外としたものです。いずれも実害が出るまで動作の裏付けがありません。
+いずれも実害が出るまで動作の裏付けがありません。
 
-- Restore workflow による復元
 - watchdog の強制停止
 - AWS Budgets の通知
 - 起動失敗やスモークテスト失敗の通知
@@ -71,4 +75,4 @@ Q1 の範囲外としたものです。いずれも実害が出るまで動作�
 
 ## Assumptions & Open Questions
 
-- notifier と watchdog の Lambda 自体には、エラー率のアラームがありません。phases/operation.md の「すべてのコンポーネントにヘルス指標とエラー率の指標を持たせる」を満たしていないおそれがあり、対応するかは本人の判断待ちです。notifier が止まると、その失敗を通知する経路もない点に注意が必要です。
+- Lambda のエラーアラーム（`notifier-errors`、`watchdog-errors`）は、Observability Setup の承認後に本人の判断で追加しました。実際に発報させる確認はしていません。

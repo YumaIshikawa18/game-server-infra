@@ -17,7 +17,10 @@ import urllib.request
 
 SEVERITIES = ('info', 'warn', 'error')
 # アラーム名は "<prefix>-<種類>"。prefix は非公開なので、種類だけを文面に使う。
-ALARM_SEVERITY = {'backup-failed': 'error', 'disk-high': 'warn', 'backup-bucket-large': 'warn'}
+ALARM_SEVERITY = {
+  'backup-failed': 'error', 'disk-high': 'warn', 'backup-bucket-large': 'warn',
+  'notifier-errors': 'error', 'watchdog-errors': 'error',
+}
 IDENTIFIER_PATTERNS = {
   'arn': re.compile(r'arn:aws[a-z-]*:'),
   'account-id': re.compile(r'(?<![0-9])[0-9]{12}(?![0-9])'),

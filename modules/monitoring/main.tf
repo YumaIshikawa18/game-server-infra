@@ -51,6 +51,26 @@ resource "aws_cloudwatch_metric_alarm" "this" {
   ok_actions         = [var.alerts_topic_arn]
 }
 
+# Lambda 自体の失敗を検知する。notifier が失敗しても、alerts トピックのメール購読には直接届く。
+# 関数名は notifier / watchdog モジュールの "<prefix>-<名前>" と合わせる。
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  for_each            = toset(["notifier", "watchdog"])
+  alarm_name          = "${var.prefix}-${each.key}-errors"
+  alarm_description   = "Lambda ${each.key} failed. Check its CloudWatch Logs."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  dimensions          = { FunctionName = "${var.prefix}-${each.key}" }
+  # 実行がない間はメトリクスが届かないので、欠測は正常として扱う。
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [var.alerts_topic_arn]
+  ok_actions         = [var.alerts_topic_arn]
+}
+
 resource "aws_budgets_budget" "monthly" {
   name         = "${var.prefix}-monthly"
   budget_type  = "COST"
