@@ -15,3 +15,9 @@ output "state_bucket_name" {
   value       = aws_s3_bucket.state.id
   sensitive   = true
 }
+
+output "log_bucket_name" {
+  description = "サーバーアクセスログの配信先。envs/prod のバックアップバケットからも使う。"
+  value       = aws_s3_bucket.logs.id
+  sensitive   = true
+}

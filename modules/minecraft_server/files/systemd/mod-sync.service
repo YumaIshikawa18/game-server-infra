@@ -1,0 +1,15 @@
+[Unit]
+Description=Download and verify Minecraft mods
+After=boot-mode.service
+Requires=boot-mode.service
+# 復元モードでは MOD もサーバーも起動しない。
+ConditionPathExists=!/run/minecraft/restore
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/minecraft/bin/mod-sync.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

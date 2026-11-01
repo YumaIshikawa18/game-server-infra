@@ -28,3 +28,9 @@ variable "availability_zone" {
     error_message = "東京リージョンの AZ を指定してください。"
   }
 }
+
+variable "flow_log_bucket_name" {
+  description = "VPC フローログの配信先（bootstrap のログバケット）。"
+  type        = string
+  sensitive   = true
+}

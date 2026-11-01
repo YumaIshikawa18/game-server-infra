@@ -1,4 +1,5 @@
 resource "aws_vpc" "minecraft" {
+  #checkov:skip=CKV2_AWS_12:既定 SG はどのリソースにも使わない。全面禁止には apply ロールに既定 SG へのタグ付けを許す必要があり、本人の判断で権限を広げない（Q5 の A）。
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
@@ -47,7 +48,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_security_group" "minecraft" {
-  # CKV2_AWS_5: ENI への関連付けは呼び出し元の minecraft_server モジュールで行う。
+  #checkov:skip=CKV2_AWS_5:ENI への関連付けは呼び出し元の minecraft_server モジュールで行う。モジュール単体の検査では関連付けが見えない。
   name        = "${var.prefix}-minecraft"
   description = "Minecraft Java access; administration uses SSM"
   vpc_id      = aws_vpc.minecraft.id
@@ -72,3 +73,18 @@ resource "aws_vpc_security_group_egress_rule" "outbound" {
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }
+
+# 誰がどのポートに接続し、拒否されたかを残す（Q5 の A）。ログバケットの flow/ に 10 分単位で送る。
+resource "aws_flow_log" "vpc" {
+  vpc_id                   = aws_vpc.minecraft.id
+  traffic_type             = "ALL"
+  log_destination_type     = "s3"
+  log_destination          = "arn:${data.aws_partition.current.partition}:s3:::${var.flow_log_bucket_name}/flow/"
+  max_aggregation_interval = 600
+
+  tags = {
+    Name = "${var.prefix}-vpc"
+  }
+}
+
+data "aws_partition" "current" {}

@@ -1,0 +1,28 @@
+# Minecraft サーバーのコンテナ定義。Dependabot（docker-compose）がイメージの digest を更新する。
+# イメージの更新 PR をマージする前に、ワールドのバックアップがあることを確認する。
+# ${...} はホストの /opt/minecraft/compose.env（Terraform が配布）から補完する。
+name: minecraft
+
+services:
+  mc:
+    # Minecraft 26.3 は Java 25 が必要（2026-11-01 確認）。タグは参考で、digest で固定する。
+    image: itzg/minecraft-server:2026.10.0-java25@sha256:5a2ab74ae179c11e2dbbce67f307cdcf2c1257b3abb0f654d3a310b3d8ea57da
+    container_name: mc
+    # 起動・停止は systemd とスクリプトが管理する。
+    restart: "no"
+    ports:
+      - "25565:25565"
+    env_file:
+      - /opt/minecraft/minecraft.env
+      # whitelist と RCON パスワード（root だけが読める 0600）。
+      - /etc/minecraft/secrets.env
+    volumes:
+      - /srv/minecraft/data:/data
+    stop_grace_period: 60s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${MC_REGION}
+        awslogs-group: ${MC_SERVER_LOG_GROUP}
+        awslogs-stream: ${MC_LOG_STREAM}
+        mode: non-blocking

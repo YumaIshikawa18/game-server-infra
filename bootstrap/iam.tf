@@ -1,10 +1,9 @@
 locals {
-  github_owner = split("/", var.github_repository)[0]
-  github_repo  = split("/", var.github_repository)[1]
+  # var.github_repository は validation で owner/repo 形式を保証済み。
   ci_subjects = {
-    plan  = ["repo:${local.github_owner}/${local.github_repo}:pull_request", "repo:${local.github_owner}/${local.github_repo}:ref:refs/heads/master"]
-    apply = ["repo:${local.github_owner}/${local.github_repo}:environment:prod"]
-    ops   = ["repo:${local.github_owner}/${local.github_repo}:environment:ops"]
+    plan  = ["repo:${var.github_repository}:pull_request", "repo:${var.github_repository}:ref:refs/heads/master"]
+    apply = ["repo:${var.github_repository}:environment:prod"]
+    ops   = ["repo:${var.github_repository}:environment:ops"]
   }
   app_resources = {
     ssm       = "arn:${local.partition}:ssm:${var.region}:${local.account_id}:parameter/${var.prefix}/*"
@@ -24,7 +23,7 @@ locals {
     "ec2:DescribeSubnets", "ec2:DescribeTags", "ec2:DescribeVolumes", "ec2:DescribeVolumesModifications",
     "ec2:DescribeVpcAttribute", "ec2:DescribeVpcs", "ssm:DescribeInstanceInformation",
     "ssm:GetCommandInvocation", "ssm:ListDocuments", "ssm:DescribeDocument", "ssm:GetDocument",
-    "ssm:ListTagsForResource", "iam:ListPolicies", "iam:ListRoles", "iam:ListInstanceProfiles",
+    "ssm:ListTagsForResource", "ec2:DescribeFlowLogs", "ec2:DescribeAddressesAttribute", "iam:ListPolicies", "iam:ListRoles", "iam:ListInstanceProfiles",
     "cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource", "logs:DescribeLogGroups",
     "logs:ListTagsForResource", "sns:ListTopics", "sns:ListSubscriptions",
   ]
@@ -57,8 +56,9 @@ locals {
   notify = { Effect = "Allow", Action = ["sns:Publish"], Resource = "arn:${local.partition}:sns:${var.region}:${local.account_id}:${var.prefix}-events" }
 }
 
+# 値を each.value で渡すと、Checkov が sub の値を静的に評価できる（map の添字参照は評価されない）。
 resource "aws_iam_role" "ci" {
-  for_each = toset(["plan", "apply", "ops"])
+  for_each = local.ci_subjects
   name     = "${var.prefix}-ci-${each.key}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -68,7 +68,7 @@ resource "aws_iam_role" "ci" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = { StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = local.ci_subjects[each.key]
+        "token.actions.githubusercontent.com:sub" = each.value
       } }
     }]
   })
@@ -88,7 +88,9 @@ resource "aws_iam_policy" "boundary" {
       { Effect = "Allow", Action = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ec2:DescribeTags", "cloudwatch:GetMetricData"], Resource = "*" },
       { Effect = "Allow", Action = ["cloudwatch:PutMetricData"], Resource = "*", Condition = { StringEquals = { "cloudwatch:namespace" = "Minecraft" } } },
       { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"], Resource = local.app_resources.logs },
-      { Effect = "Allow", Action = ["ssm:UpdateInstanceInformation", "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"], Resource = "*" },
+      { Effect = "Allow", Action = ["ssm:UpdateInstanceInformation"], Resource = local.app_resources.instance },
+      # ssmmessages はリソース単位の制限に非対応（Session Manager の公式ポリシー例も Resource = "*"）。
+      { Effect = "Allow", Action = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"], Resource = "*" },
       { Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = local.app_resources.lambda },
       local.notify,
     ]
@@ -96,16 +98,23 @@ resource "aws_iam_policy" "boundary" {
 }
 
 locals {
+  # aws_s3_bucket の refresh が読む設定（未設定でも読み取りが必要）。
+  bucket_refresh_reads = [
+    "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketWebsite", "s3:GetAccelerateConfiguration",
+    "s3:GetBucketRequestPayment", "s3:GetReplicationConfiguration", "s3:GetBucketObjectLockConfiguration",
+  ]
   application_reads = [
     { Effect = "Allow", Action = ["ssm:GetParameter"], Resource = ["arn:${local.partition}:ssm:${var.region}::parameter/aws/service/ami-amazon-linux-latest/*"] },
-    { Effect = "Allow", Action = ["s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketVersioning", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging"], Resource = local.backup_arn },
-    { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectAttributes"], Resource = "${local.backup_arn}/deploy/*" },
+    { Effect = "Allow", Action = ["s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketVersioning", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketLogging", "s3:GetBucketOwnershipControls"], Resource = local.backup_arn },
+    { Effect = "Allow", Action = local.bucket_refresh_reads, Resource = local.backup_arn },
+    { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging"], Resource = "${local.backup_arn}/deploy/*" },
     { Effect = "Allow", Action = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:GetInstanceProfile", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListEntitiesForPolicy"], Resource = [local.app_role_arn, "${local.account_arn}:instance-profile/${var.prefix}-app-*", "${local.account_arn}:policy/${var.prefix}-app-*", "arn:${local.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"] },
     { Effect = "Allow", Action = ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetPolicy", "lambda:ListTags", "lambda:GetFunctionConcurrency"], Resource = local.app_resources.lambda },
     { Effect = "Allow", Action = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"], Resource = local.app_resources.scheduler },
     { Effect = "Allow", Action = ["sns:GetTopicAttributes", "sns:ListTagsForResource", "sns:ListSubscriptionsByTopic"], Resource = local.app_resources.sns },
     { Effect = "Allow", Action = ["sns:GetSubscriptionAttributes"], Resource = "${local.app_resources.sns}:*" },
     { Effect = "Allow", Action = ["budgets:ViewBudget"], Resource = "arn:${local.partition}:budgets::${local.account_id}:budget/${var.prefix}-*" },
+    { Effect = "Allow", Action = ["ssm:DescribeDocumentPermission"], Resource = local.app_resources.document },
   ]
 }
 

@@ -50,6 +50,23 @@ variable "backup_bucket_name" {
   sensitive   = true
 }
 
+variable "log_bucket_name" {
+  description = "state とバックアップのサーバーアクセスログを受ける非公開バケット名。"
+  type        = string
+  sensitive   = true
+}
+
+variable "access_log_retention_days" {
+  description = "サーバーアクセスログの保存日数。"
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.access_log_retention_days >= 1 && var.access_log_retention_days <= 365
+    error_message = "保存日数は 1〜365 日にしてください。"
+  }
+}
+
 variable "github_repository" {
   description = "OIDC trust を許可する owner/repository。非公開設定から渡す。"
   type        = string

@@ -1,9 +1,14 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
+}
 
 variables {
-  prefix            = "example"
-  vpc_cidr          = "10.20.0.0/24"
-  availability_zone = "ap-northeast-1a"
+  prefix               = "example"
+  vpc_cidr             = "10.20.0.0/24"
+  availability_zone    = "ap-northeast-1a"
+  flow_log_bucket_name = "example-logs"
 }
 
 run "minecraft_network" {
@@ -22,6 +27,11 @@ run "minecraft_network" {
   assert {
     condition     = aws_vpc_security_group_ingress_rule.minecraft.from_port == 25565 && aws_vpc_security_group_ingress_rule.minecraft.to_port == 25565 && aws_vpc_security_group_ingress_rule.minecraft.ip_protocol == "tcp"
     error_message = "受信は Minecraft の TCP ポートだけです。"
+  }
+
+  assert {
+    condition     = aws_flow_log.vpc.log_destination == "arn:aws:s3:::example-logs/flow/" && aws_flow_log.vpc.traffic_type == "ALL" && aws_flow_log.vpc.log_destination_type == "s3"
+    error_message = "VPC フローログをログバケットの flow/ に送ってください。"
   }
 }
 

@@ -14,11 +14,11 @@ def run(args, cwd=ROOT):
   subprocess.run(args, cwd=cwd, check=True)
 
 
-def image(tool, args, directory=ROOT, offline=False):
-  extra = []
+def image(tool, args, directory=ROOT, offline=False, entrypoint=None):
+  extra = ['--entrypoint', entrypoint] if entrypoint else []
   if tool == 'tflint':
     (ROOT / '.ci-private/tflint').mkdir(parents=True, exist_ok=True)
-    extra = ['-e', 'TFLINT_PLUGIN_DIR=/workspace/.ci-private/tflint']
+    extra += ['-e', 'TFLINT_PLUGIN_DIR=/workspace/.ci-private/tflint']
   images = {
     'terraform': f'hashicorp/terraform:{VERSIONS["terraform"]}',
     'tflint': f'ghcr.io/terraform-linters/tflint:v{VERSIONS["tflint"]}',
@@ -116,7 +116,11 @@ def main(check):
   elif check == 'checkov':
     modules()
     for directory in [ROOT / 'bootstrap', ROOT / 'envs', ROOT / 'modules', ROOT / '.github']:
-      image('checkov', ['-d', str(directory.relative_to(ROOT)), '--framework', 'terraform', 'github_actions', '--compact'])
+      # 非公開の変数はダミー値で補い、静的評価できない値による誤検知を避ける。
+      dummy = ROOT / 'tests/checkov' / f'{directory.name}.tfvars.json'
+      var_file = ['--var-file', str(dummy.relative_to(ROOT))] if dummy.is_file() else []
+      image('checkov', ['-d', str(directory.relative_to(ROOT)), '--framework', 'terraform', 'github_actions',
+                        '--compact', *var_file])
   elif check == 'pytest':
     if not list((ROOT / 'lambda').glob('*/tests/test_*.py')):
       raise ValueError('Lambda tests are required')
@@ -130,7 +134,9 @@ def main(check):
     files = sorted((ROOT / 'tests').rglob('*.bats'))
     if not files:
       raise ValueError('Bats tests are required')
-    image('bats', [str(p.relative_to(ROOT)) for p in files])
+    # ホスト（AL2023）と同じく GNU tar・zstd・jq・openssl を使って検証する（外部 API はスタブ）。
+    image('bats', ['-ec', 'apk add --no-cache --quiet jq openssl zstd tar coreutils util-linux >/dev/null && bats "$@"',
+                   'bats', *[str(p.relative_to(ROOT)) for p in files]], entrypoint='bash')
   elif check == 'gitleaks':
     image('gitleaks', ['git', '--redact', '--no-banner', '--log-opts=--all', '.'])
   elif check == 'identifier-check':

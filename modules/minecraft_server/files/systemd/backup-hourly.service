@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly Minecraft world backup
+After=minecraft.service
+ConditionPathExists=!/run/minecraft/restore
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/backup-hourly.sh
+TimeoutStartSec=1800

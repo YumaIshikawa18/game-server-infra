@@ -18,6 +18,7 @@ variables {
   prefix              = "example"
   state_bucket_name   = "example-state"
   backup_bucket_name  = "example-backup"
+  log_bucket_name     = "example-logs"
   github_repository   = "example/example"
 }
 
@@ -35,6 +36,22 @@ run "least_privilege" {
   assert {
     condition     = toset(jsondecode(aws_iam_role.ci["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:environment:prod"])
     error_message = "apply は prod の承認を通る subject だけを許可します。"
+  }
+  assert {
+    condition     = toset(jsondecode(aws_iam_role.ci["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:pull_request", "repo:example/example:ref:refs/heads/master"])
+    error_message = "plan は同一リポジトリの PR と master だけを許可します。"
+  }
+  assert {
+    condition     = toset(jsondecode(aws_iam_role.ci["ops"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:environment:ops"])
+    error_message = "ops は ops Environment の subject だけを許可します。"
+  }
+  assert {
+    condition     = alltrue([for _, role in aws_iam_role.ci : !strcontains(role.assume_role_policy, "*") && role.max_session_duration == 3600])
+    error_message = "trust policy にワイルドカードを使わず、セッションは 1 時間までにしてください。"
+  }
+  assert {
+    condition     = alltrue([for statement in jsondecode(aws_iam_policy.boundary.policy).Statement : statement.Resource != "*" || alltrue([for action in tolist(statement.Action) : !startswith(action, "ssm:") || action == "ssm:DescribeInstanceInformation"])])
+    error_message = "boundary の ssm 操作は対象リソースを限定してください。"
   }
   assert {
     condition     = alltrue([for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : !contains(tolist(statement.Action), "s3:PutObject") || statement.Resource == "arn:aws:s3:::example-state/prod/terraform.tfstate.tflock"])
@@ -60,6 +77,52 @@ run "least_privilege" {
     condition     = alltrue([for _, policy in aws_iam_policy.apply : length(policy.policy) <= 6144])
     error_message = "管理 IAM ポリシーがサイズ上限を超えています。"
   }
+}
+
+run "access_logs" {
+  command = plan
+
+  assert {
+    condition     = aws_s3_bucket_logging.state.target_bucket == "example-logs" && aws_s3_bucket_logging.state.target_prefix == "state/"
+    error_message = "state バケットのアクセスログをログバケットの state/ に送ってください。"
+  }
+  assert {
+    condition     = one([for rule in aws_s3_bucket_lifecycle_configuration.logs.rule : rule.expiration[0].days]) == 90
+    error_message = "アクセスログの保存期間は 90 日にしてください。"
+  }
+  assert {
+    condition     = one(aws_s3_bucket_server_side_encryption_configuration.logs.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "AES256" && aws_s3_bucket_public_access_block.logs.restrict_public_buckets
+    error_message = "ログバケットは SSE-S3 で暗号化し、公開を禁止してください。"
+  }
+  assert {
+    condition = alltrue([for statement in jsondecode(aws_s3_bucket_policy.logs.policy).Statement : statement.Effect == "Deny" || statement.Principal.Service == "delivery.logs.amazonaws.com" || (
+      statement.Principal.Service == "logging.s3.amazonaws.com" && statement.Action == "s3:PutObject"
+      && statement.Condition.StringEquals["aws:SourceAccount"] == "123456789012"
+      && contains(["arn:aws:s3:::example-state", "arn:aws:s3:::example-backup"], statement.Condition.ArnLike["aws:SourceArn"])
+    )])
+    error_message = "ログの書き込みは S3 のログ配信サービスから、state とバックアップの分だけに限定してください。"
+  }
+}
+
+run "flow_log_delivery" {
+  command = plan
+
+  assert {
+    condition = alltrue([for statement in jsondecode(aws_s3_bucket_policy.logs.policy).Statement : statement.Principal == "*" || statement.Principal.Service != "delivery.logs.amazonaws.com" || (
+      statement.Condition.StringEquals["aws:SourceAccount"] == "123456789012" && statement.Condition.ArnLike["aws:SourceArn"] == "arn:aws:logs:ap-northeast-1:123456789012:*"
+    )])
+    error_message = "フローログの配信は自アカウントのログ配信だけに許可してください。"
+  }
+  assert {
+    condition     = anytrue([for statement in jsondecode(aws_s3_bucket_policy.logs.policy).Statement : try(statement.Resource == "arn:aws:s3:::example-logs/flow/AWSLogs/123456789012/*", false)])
+    error_message = "フローログの書き込みは flow/ に限ってください。"
+  }
+}
+
+run "reject_long_log_retention" {
+  command = plan
+  variables { access_log_retention_days = 400 }
+  expect_failures = [var.access_log_retention_days]
 }
 
 run "reject_short_prefix" {

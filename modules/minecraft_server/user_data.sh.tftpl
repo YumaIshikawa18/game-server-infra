@@ -1,0 +1,89 @@
+#!/bin/bash
+# 初回起動だけ実行される（cloud-init）。ツールの導入、ワールド EBS のマウント、
+# 起動ごとに deploy/ を同期する mc-deploy-sync の登録を行う。以降の処理は systemd に任せる。
+set -euo pipefail
+exec >>/var/log/minecraft-bootstrap.log 2>&1
+
+mkdir -p /etc/minecraft /var/log/minecraft
+cat >/etc/minecraft/bootstrap.env <<'ENV'
+MC_REGION=${region}
+MC_BUCKET=${bucket}
+ENV
+chmod 600 /etc/minecraft/bootstrap.env
+
+dnf install -y docker amazon-cloudwatch-agent zstd jq
+
+# docker compose プラグインは版と sha256 を固定して入れる。
+plugin=/usr/local/lib/docker/cli-plugins/docker-compose
+mkdir -p "$(dirname "$plugin")"
+curl -fsSL --proto '=https' --retry 3 -o "$plugin.download" "${compose_url}"
+echo "${compose_sha256}  $plugin.download" | sha256sum -c -
+install -m 0755 "$plugin.download" "$plugin"
+rm -f "$plugin.download"
+
+# ワールド EBS（アタッチを待つ）。ファイルシステムが無いと確認できたときだけ作成する。
+device=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(volume_id, "-", "")}
+for _ in $(seq 1 120); do
+  [[ -e $device ]] && break
+  sleep 5
+done
+[[ -e $device ]] || { echo "world volume was not attached"; exit 1; }
+set +e
+blkid -p "$device" >/dev/null
+probe=$?
+set -e
+if [[ $probe -eq 2 ]]; then
+  mkfs.xfs -L mcworld "$device"
+elif [[ $probe -ne 0 ]]; then
+  echo "unexpected filesystem probe result: $probe"
+  exit 1
+fi
+uuid=$(blkid -s UUID -o value "$device")
+mkdir -p /srv/minecraft
+grep -q "UUID=$uuid" /etc/fstab || echo "UUID=$uuid /srv/minecraft xfs defaults,nofail 0 2" >>/etc/fstab
+mount -a
+mkdir -p /srv/minecraft/docker /srv/minecraft/data /srv/minecraft/mods-cache
+
+# イメージのキャッシュもワールド EBS に置き、インスタンスを置き換えても再利用する。
+cat >/etc/docker/daemon.json <<'JSON'
+{"data-root": "/srv/minecraft/docker", "live-restore": false}
+JSON
+
+cat >/usr/local/sbin/mc-deploy-sync <<'SYNC'
+#!/bin/bash
+# 起動ごとに deploy/ を同期し、スクリプト・ユニット・エージェント設定を入れ直す。
+set -euo pipefail
+. /etc/minecraft/bootstrap.env
+aws s3 sync "s3://$MC_BUCKET/deploy/" /opt/minecraft/ --region "$MC_REGION" --delete --only-show-errors
+chmod 0755 /opt/minecraft/bin/*.sh
+install -m 0600 /opt/minecraft/host.env /etc/minecraft/host.env
+install -m 0644 /opt/minecraft/systemd/* /etc/systemd/system/
+install -m 0644 /opt/minecraft/config/cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+systemctl daemon-reload
+systemctl enable boot-mode.service mod-sync.service minecraft.service health.timer backup-hourly.timer
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+SYNC
+chmod 0755 /usr/local/sbin/mc-deploy-sync
+
+cat >/etc/systemd/system/mc-deploy-sync.service <<'UNIT'
+[Unit]
+Description=Sync Minecraft deploy files from S3
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/mc-deploy-sync
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now docker.service
+systemctl enable --now mc-deploy-sync.service
+# 初回だけは multi-user.target に入った後なので、明示的に起動する。
+systemctl start boot-mode.service
+systemctl start minecraft.service health.timer backup-hourly.timer

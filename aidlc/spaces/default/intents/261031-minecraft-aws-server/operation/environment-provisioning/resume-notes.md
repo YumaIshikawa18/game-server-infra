@@ -13,16 +13,22 @@ Environment Provisioning の実装・検証途中で本人の希望により中�
 - IAM の8文書を AWS Access Analyzer ValidatePolicy で検証し、エラーは修正した。S3 If-None-Match のリテラル * に関する警告が2件残る。
 - プロジェクトとローカルのモデルプリセットを thorough に変更済み。ローカル設定は gitignore の対象。
 
+## 2026-11-01 の進捗（bootstrap 完了）
+
+- Checkov は bootstrap で failed 0 / 理由付き抑止 7。
+  - CKV_AWS_393 は誤検知だった。Checkov が `local.ci_subjects[each.key]` と分割した locals の補間を評価できないため。for_each を subject の map にして `each.value` で渡し、`var.github_repository` を直接使う形に変更した。CI では `tests/checkov/<dir>.tfvars.json` のダミー値を `--var-file` で渡す。
+  - CKV_AWS_355 / 290 は boundary の SSM エージェント文が原因。`ssm:UpdateInstanceInformation` をインスタンス ARN に限定し、`ssmmessages:*` は公式どおり `*` のまま（リソース制限非対応）。
+  - S3 の 4 件は Q3 で本人が B を選択。ログ専用バケット（`logs.tf`、SSE-S3、保存 90 日）を追加し、state のアクセスログを `state/` に送る。残りはリソース限定の理由付き抑止。
+- fmt / validate / terraform test 5 件 / tflint / 識別子チェックが成功。
+- 本人の承認を得て bootstrap を personal で適用した（追加 30）。再 plan は 0 / 0 / 0。出力は `.ci-private/bootstrap-outputs.json`（gitignore 済み）。bootstrap の state は手元の `bootstrap/terraform.tfstate`（gitignore 済み）。
+
 ## 次に行うこと
 
-- bootstrap の Checkov 指摘を整理・修正する。最新スキャンは passed 58 / failed 9。
-- CKV_AWS_393 が CI の3ロールで失敗する。sub はリポジトリと環境を限定しているが、for_each とローカルマップの静的評価を調査中。まだ誤検知と確定していない。実際の trust policy と全ロールのテストを確認してから対処する。
-- boundary の CKV_AWS_355 / CKV_AWS_290 を調査し、リソース制限が可能な操作は分離・限定する。例外が必要なら API の制約を根拠に示す。
-- S3 の CKV_AWS_144 / CKV_AWS_145 / CKV_AWS_18 / CKV2_AWS_62 は、採用済みの単一リージョン・SSE-S3 構成との関係を整理する。理由付きのリソース限定例外にするか構成を追加するかは、まだ本人に質問・決定していない。勝手に抑止しない。
-- tflint は bootstrap で指摘なし。コンテナ間で plugin が失われる問題を直し、job 内の専用キャッシュを共有するよう CI ヘルパーを修正した。
-- 修正後に fmt / validate / モックテスト / 静的スキャンを実行し、bootstrap plan を再作成する。保存済み plan はその後のコード変更で古くなっているため、そのまま apply しない。
-- bootstrap の具体的な plan を本人に提示してから適用する。本番適用は既決どおり PR → master → prod 承認。
-- envs/prod と残りのモジュール、Minecraft ホスト処理、バックアップ、監視、GitHub 設定はまだ実装・構築が残っている。全体がデプロイ可能とは扱わない。
+- Q3 の追加分を含めたサマリーを、成果物の作成前に本人へ再確認する。
+- envs/prod のバックアップバケットは、ログバケットの `backup/` にアクセスログを送る（バケットポリシーは bootstrap 側で許可済み）。ログバケット名は変数にして `TF_INPUTS_JSON` から渡す。
+- plan ロールの S3 読み取り権限が、aws_s3_bucket の refresh に必要な Get 系 API を満たすか、envs/prod の plan で確認する。
+- envs/prod と残りのモジュール（minecraft_server、backup、monitoring、Lambda）、ホスト処理、SSM 文書、GitHub 設定はまだ実装・構築が残っている。walking skeleton の順（ネットワーク → EC2 → クライアント接続）で進める。
+- 本番適用は既決どおり PR → master → prod 承認。
 
 ## AWS の確認結果
 

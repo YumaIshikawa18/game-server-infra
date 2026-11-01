@@ -3,6 +3,7 @@ locals {
   ec2_create_actions = [
     "ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway", "ec2:CreateRouteTable",
     "ec2:CreateSecurityGroup", "ec2:CreateNetworkInterface", "ec2:CreateVolume", "ec2:AllocateAddress",
+    "ec2:CreateFlowLogs",
   ]
   ec2_mutate_actions = [
     "ec2:DeleteVpc", "ec2:DeleteSubnet", "ec2:DeleteInternetGateway", "ec2:DeleteRouteTable",
@@ -17,6 +18,7 @@ locals {
     "ec2:StartInstances", "ec2:StopInstances", "ec2:TerminateInstances",
     "ec2:AssociateIamInstanceProfile", "ec2:ReplaceIamInstanceProfileAssociation",
     "ec2:DisassociateIamInstanceProfile", "ec2:MonitorInstances", "ec2:UnmonitorInstances",
+    "ec2:DeleteFlowLogs",
   ]
   apply_groups = {
     state = concat(local.state_read, local.operation_lock, [
@@ -32,6 +34,8 @@ locals {
       { Effect = "Allow", Action = ["ec2:RunInstances"], Resource = "arn:${local.partition}:ec2:${var.region}::image/*" },
       { Effect = "Allow", Action = ["ec2:CreateTags"], Resource = "${local.ec2_arn}:*/*", Condition = { StringEquals = { "ec2:CreateAction" = [for action in concat(local.ec2_create_actions, ["ec2:RunInstances"]) : trimprefix(action, "ec2:")] } } },
       { Effect = "Allow", Action = ["ec2:CreateTags", "ec2:DeleteTags"], Resource = "${local.ec2_arn}:*/*", Condition = { StringEquals = { "ec2:ResourceTag/Project" = var.prefix } } },
+      # S3 へのフローログ配信の登録。リソース単位の制限に非対応。
+      { Effect = "Allow", Action = ["logs:CreateLogDelivery", "logs:DeleteLogDelivery"], Resource = "*" },
     ])
     identity = [
       { Effect = "Allow", Action = ["iam:CreateRole", "iam:PutRolePermissionsBoundary"], Resource = local.app_role_arn, Condition = { StringEquals = { "iam:PermissionsBoundary" = "${local.account_arn}:policy/${var.prefix}-ci-boundary" } } },
@@ -44,14 +48,15 @@ locals {
       { Effect = "Allow", Action = ["iam:PassRole"], Resource = "${local.account_arn}:role/${var.prefix}-app-scheduler", Condition = { StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" } } },
     ]
     storage = [
-      { Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketTagging", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketLocation", "s3:ListBucket"], Resource = local.backup_arn },
+      { Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketTagging", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketLocation", "s3:ListBucket", "s3:PutBucketLogging", "s3:GetBucketLogging", "s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls"], Resource = local.backup_arn },
+      { Effect = "Allow", Action = local.bucket_refresh_reads, Resource = local.backup_arn },
       { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectTagging", "s3:PutObjectTagging"], Resource = "${local.backup_arn}/deploy/*" },
     ]
     services = concat([
       { Effect = "Allow", Action = ["ssm:SendCommand"], Resource = slice(local.app_resources.document, 0, 2) },
       local.ssm_commands[1], local.ssm_commands[2],
       ], [
-      { Effect = "Allow", Action = ["ssm:CreateDocument", "ssm:UpdateDocument", "ssm:UpdateDocumentDefaultVersion", "ssm:DeleteDocument", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource"], Resource = local.app_resources.document },
+      { Effect = "Allow", Action = ["ssm:CreateDocument", "ssm:UpdateDocument", "ssm:UpdateDocumentDefaultVersion", "ssm:DeleteDocument", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:DescribeDocumentPermission"], Resource = local.app_resources.document },
       { Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource"], Resource = local.app_resources.logs },
       { Effect = "Allow", Action = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"], Resource = "arn:${local.partition}:cloudwatch:${var.region}:${local.account_id}:alarm:${var.prefix}-*" },
       { Effect = "Allow", Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:ListTagsForResource", "sns:TagResource", "sns:UntagResource", "sns:Subscribe", "sns:ListSubscriptionsByTopic"], Resource = local.app_resources.sns },

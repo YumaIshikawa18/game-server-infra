@@ -12,7 +12,7 @@ from scripts.ci.plan import summarize, strings
 from scripts.local.prepare import ROOT, command, private_json
 
 
-def invoke(args, credentials):
+def invoke(args, credentials, directory='bootstrap'):
   environment = dict(os.environ)
   environment.update({
     'AWS_ACCESS_KEY_ID': credentials['AccessKeyId'],
@@ -23,16 +23,16 @@ def invoke(args, credentials):
   result = subprocess.run([
     'docker', 'run', '--rm', '-e', 'AWS_ACCESS_KEY_ID', '-e', 'AWS_SECRET_ACCESS_KEY',
     '-e', 'AWS_SESSION_TOKEN', '-e', 'AWS_REGION', '-e', 'TF_IN_AUTOMATION=true',
-    '-v', str(ROOT) + ':/workspace', '-w', '/workspace/bootstrap',
+    '-v', str(ROOT) + ':/workspace', '-w', '/workspace/' + directory,
     'hashicorp/terraform:1.17.1', *args,
   ], cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
   if result.returncode:
     # 生の診断は値を含み得るため、gitignore 済みの非公開ファイルにだけ保存する。
-    path = ROOT / '.ci-private/bootstrap-diagnostics.log'
+    path = ROOT / f'.ci-private/{directory.replace("/", "-")}-diagnostics.log'
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, 'wb') as target:
       target.write(result.stdout + result.stderr)
-    raise RuntimeError('Terraform failed; private diagnostics are in .ci-private/bootstrap-diagnostics.log')
+    raise RuntimeError(f'Terraform failed; private diagnostics are in {path.relative_to(ROOT)}')
   return result.stdout
 
 
@@ -72,10 +72,25 @@ def validate_policies(plan):
   print(json.dumps({'validated_policy_documents': len(documents), 'policy_warning_count': len(warnings)}))
 
 
+def prod_plan(credentials, values):
+  """envs/prod の plan だけを作り、件数とアドレスのサマリーを出す。apply は GitHub Actions からだけ行う。"""
+  directory = 'envs/prod'
+  invoke(['init', '-input=false', '-lockfile=readonly', '-reconfigure', '-backend-config=backend.hcl'],
+         credentials, directory)
+  invoke(['plan', '-input=false', '-no-color', '-lock-timeout=5m', '-out=/workspace/.ci-private/prod-plan.bin'],
+         credentials, directory)
+  plan = json.loads(invoke(['show', '-json', '/workspace/.ci-private/prod-plan.bin'], credentials, directory))
+  personal = json.loads((ROOT / 'envs/prod/private.auto.tfvars.json').read_text())
+  allowed = re.findall(r'"(\d{12})"', (ROOT / 'envs/prod/local.auto.tfvars').read_text())
+  print(summarize(plan, list(strings(values)) + list(strings(personal)) + allowed))
+  # plan ファイルには値が平文で入るため残さない（承認と適用は CI で行う）。
+  (ROOT / '.ci-private/prod-plan.bin').unlink()
+
+
 def main():
   operation = sys.argv[1] if len(sys.argv) == 2 else ''
-  if operation not in ('plan', 'apply'):
-    raise ValueError('Use plan or apply')
+  if operation not in ('plan', 'apply', 'prod-plan'):
+    raise ValueError('Use plan, apply or prod-plan')
   os.umask(0o077)
   private = ROOT / '.ci-private'
   private.mkdir(exist_ok=True)
@@ -85,6 +100,9 @@ def main():
   if identity['Account'] not in allowed:
     raise ValueError('The active account is not allowed')
   credentials = command(['aws', 'configure', 'export-credentials', '--profile', 'personal', '--format', 'process'])
+  if operation == 'prod-plan':
+    prod_plan(credentials, values)
+    return
   path = private / 'bootstrap-plan.bin'
   metadata_path = private / 'bootstrap-plan-review.json'
   if operation == 'plan':

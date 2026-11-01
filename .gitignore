@@ -119,3 +119,6 @@ aidlc/spaces/*/intents/*/.aidlc-*
 aidlc/diagnostics/
 .claude/settings.local.json
 # END AI-DLC:gitignore
+
+# Lambda の zip（plan 時に生成）
+.build/

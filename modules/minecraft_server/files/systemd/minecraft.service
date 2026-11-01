@@ -1,0 +1,17 @@
+[Unit]
+Description=Minecraft server container
+After=docker.service mod-sync.service
+Requires=docker.service mod-sync.service
+ConditionPathExists=!/run/minecraft/restore
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/opt/minecraft/bin/prepare-env.sh
+ExecStart=/usr/bin/docker compose --file /opt/minecraft/compose.yml --env-file /opt/minecraft/compose.env up --detach --pull missing
+ExecStop=/usr/bin/docker compose --file /opt/minecraft/compose.yml --env-file /opt/minecraft/compose.env stop --timeout 60
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

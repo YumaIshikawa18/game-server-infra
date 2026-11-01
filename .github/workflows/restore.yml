@@ -1,6 +1,7 @@
 name: Restore
 
 on:
+  # checkov:skip=CKV_GHA_7:ビルド成果物を作らない運用ワークフロー。復元するバックアップのキーは入力が必須で、operations.py と SSM 文書の allowedPattern で形式を検査する。
   workflow_dispatch:
     inputs:
       backup_key:

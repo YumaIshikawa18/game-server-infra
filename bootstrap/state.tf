@@ -19,6 +19,9 @@ locals {
 }
 
 resource "aws_s3_bucket" "state" {
+  #checkov:skip=CKV_AWS_144:単一リージョン（東京）の方針。東京の障害時はサーバーも動かないため、state だけ複製しても復旧できない。
+  #checkov:skip=CKV_AWS_145:SSE-S3 の方針。aws/s3 鍵は鍵ポリシーを編集できず、運用ロックの IAM 条件も AES256 を前提にしている。
+  #checkov:skip=CKV2_AWS_62:state の変更通知は不要。デプロイの結果は workflow から SNS の events に通知する。
   bucket = var.state_bucket_name
 
   lifecycle {

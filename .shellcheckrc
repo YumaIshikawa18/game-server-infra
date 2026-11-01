@@ -1,0 +1,3 @@
+# source する共通ファイル（common.sh / backup-lib.sh）も検査対象に含める。
+external-sources=true
+source-path=SCRIPTDIR
