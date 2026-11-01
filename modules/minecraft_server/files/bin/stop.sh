@@ -23,13 +23,16 @@ schedule_instance_stop() {
 }
 
 STOP_COMMITTED=false
+# この停止処理が save-off を送ったか。ロックを取れずに終わった場合は、
+# 毎時バックアップの save-off を解除しないよう save-on を送らない。
+SAVE_SUSPENDED=false
 
 # 停止の予約まで進まずに終了したら（失敗・タイムアウト・予期しない終了のどれでも）、
 # mc:stopping タグと停止中の印を外す。残ると watchdog と health.sh が止まったままになる。
 release_stopping() {
   if [[ $STOP_COMMITTED != true ]]; then
-    # save-off の後に中断された場合も、動き続けるサーバーの自動保存を戻す（何度送っても害はない）。
-    if container_running; then
+    # この停止処理が save-off を送った後に中断された場合は、動き続けるサーバーの自動保存を戻す。
+    if [[ $SAVE_SUSPENDED == true ]] && container_running; then
       rcon save-on >/dev/null || log warn "event=save_on_failed"
     fi
     untag_self mc:stopping || log warn "event=untag_failed tag=mc:stopping"
@@ -64,6 +67,7 @@ main() {
   fi
   local save_ok=true uploaded=false
   if container_running; then
+    SAVE_SUSPENDED=true
     if ! rcon save-off >/dev/null || ! rcon save-all flush >/dev/null; then
       save_ok=false
       log error "event=save_failed reason=${reason}"

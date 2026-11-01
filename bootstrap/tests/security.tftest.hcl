@@ -75,6 +75,18 @@ run "least_privilege" {
     error_message = "state バケットの公開を禁止してください。"
   }
   assert {
+    condition     = anytrue([for statement in jsondecode(aws_iam_policy.apply["reads"].policy).Statement : contains(tolist(statement.Action), "ssm:GetParameter") && contains(tolist(statement.Resource), "arn:aws:ssm:ap-northeast-1::parameter/aws/service/ami-amazon-linux-latest/*")])
+    error_message = "apply ロールにも、作り直す plan で使う読み取り（AMI の SSM パラメータなど）を付けてください。"
+  }
+  assert {
+    condition     = toset(keys(aws_iam_role_policy_attachment.apply)) == toset(keys(aws_iam_policy.apply))
+    error_message = "apply 用のポリシーはすべて apply ロールに付けてください。"
+  }
+  assert {
+    condition     = length(aws_iam_role_policy_attachment.apply) <= 10
+    error_message = "ロールに付けられる管理ポリシーは 10 個までです。"
+  }
+  assert {
     condition     = alltrue([for _, policy in aws_iam_policy.apply : length(policy.policy) <= 6144])
     error_message = "管理 IAM ポリシーがサイズ上限を超えています。"
   }

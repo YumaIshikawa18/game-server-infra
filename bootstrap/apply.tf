@@ -21,6 +21,8 @@ locals {
     "ec2:DeleteFlowLogs",
   ]
   apply_groups = {
+    # 承認後の deploy は apply ロールで plan を作り直すため、plan ロールと同じ読み取りも必要（AMI の SSM パラメータなど）。
+    reads = local.application_reads
     state = concat(local.state_read, local.operation_lock, [
       { Effect = "Allow", Action = ["s3:PutObject"], Resource = "${local.state_bucket_arn}/${var.state_key}" },
       { Effect = "Deny", Action = ["iam:*"], Resource = [local.ci_role_arn, local.ci_policy_arn] },
@@ -71,7 +73,7 @@ locals {
 
 # 管理ポリシーを分け、ポリシーごとの上限とロールの inline policy 合計上限を超えないようにする。
 resource "aws_iam_policy" "apply" {
-  for_each = toset(["state", "compute", "identity", "storage", "services"])
+  for_each = toset(["reads", "state", "compute", "identity", "storage", "services"])
   name     = "${var.prefix}-ci-apply-${each.key}"
   policy = jsonencode({
     Version   = "2012-10-17"
@@ -79,8 +81,9 @@ resource "aws_iam_policy" "apply" {
   })
 }
 
+# ポリシーの一覧から作り、ポリシーを足したのに付け忘れることがないようにする。
 resource "aws_iam_role_policy_attachment" "apply" {
-  for_each   = toset(["state", "compute", "identity", "storage", "services"])
+  for_each   = aws_iam_policy.apply
   role       = aws_iam_role.ci["apply"].name
-  policy_arn = aws_iam_policy.apply[each.key].arn
+  policy_arn = each.value.arn
 }

@@ -174,6 +174,9 @@ setup() {
   grep -q 'delete-tags .*Key=mc:stopping' "$CALLS"
   [ ! -e "$MC_STATE_DIR/stopping" ]
   [ "$(count_calls 'systemd-run')" -eq 0 ]
+  # ロックを持つ毎時バックアップの save-off を解除しない（Codex P2）。
+  [ "$(count_calls 'rcon-cli save-on')" -eq 0 ]
+  [ "$(count_calls 'rcon-cli save-off')" -eq 0 ]
 }
 
 @test "stop: 置き換えを中止したときも mc:stopping タグを外す" {

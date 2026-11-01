@@ -90,3 +90,4 @@
 
 <!-- Project-specific corrections from human feedback. -->
 <!-- Format: NEVER/ALWAYS [behavior] (learned [date]) -->
+- NEVER PR のレビューコメントへの返信に「ご指摘ありがとうございます」「ご指摘のとおりです」などの前置きを書く。対応内容（コミット、変更、追加したテスト）から書き始める (learned 2026-11-01) <!-- cid:261031-minecraft-aws-server:environment-provisioning:9503994752e50b6bc65a08af410f469c15c48bbb279f0308ac0757902f0745d4 -->

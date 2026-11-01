@@ -53,14 +53,19 @@ X. Other (please specify)
 
 ## Consolidated Summary Confirmation
 
-- 初回は新しいワールドで始める。以前のコードやワールドは移行しない。
+- 初回は新しいワールドで始める。以前のコードやワールドは移行しない。（Q1）
 - 承認済み設計を基に bootstrap / envs/prod / modules の Terraform とホスト側の処理を新規実装し、各モジュールの plan モード・モックテストと静的検査を用意する。
 - 最初は最小構成でクライアント接続を確認する順序を守り、ローダー切り替え、バックアップ、監視を積み上げる。
 - 東京、専用 VPC、既定 m7g.xlarge、暗号化した独立 EBS、S3 state とネイティブロック、OIDC の最小権限、S3 運用ロックを既決どおり実装する。
-- EventBridge Scheduler を維持し、watchdog Lambda の呼び出しだけを許可した専用ロールを追加する。追加の PassRole はそのロール ARN と scheduler.amazonaws.com の組み合わせだけに限定し、permissions boundary を必須にする。IAM ロールは当初の 6 個から 7 個になる。
+- EventBridge Scheduler を維持し、watchdog Lambda の呼び出しだけを許可した専用ロールを追加する。追加の PassRole はそのロール ARN と scheduler.amazonaws.com の組み合わせだけに限定し、permissions boundary を必須にする。IAM ロールは当初の 6 個から 7 個になる。（Q2）
+- state とバックアップの S3 バケットは、ログ専用バケットへサーバーアクセスログを送る（保存 90 日）。レプリケーション・KMS・イベント通知の指摘は、該当リソースに限って理由付きで抑止する。（Q3）
+- 初回の Minecraft は 26.3（vanilla、Java 25 の itzg イメージを digest 固定）。（Q4）
+- VPC フローログをログバケットの `flow/` に送る。既定 SG の指摘は理由付きで抑止し、IAM は広げない。（Q5）
+- 月の予算は 20 USD（1 USD = 150 円）で、実績・予測の 80% / 100% で通知する。（Q6）
+- メールアドレスと EULA への同意は、本人が gitignore 済みの非公開ファイルに書く。（Q7）
 - allowed_account_ids を含む既存の非公開ローカル設定を保持し、AWS 識別子や秘匿値をコード・公開ログに出さない。
-- AWS 不要のコード作成・検証を先に行う。実 AWS の確認・適用前に personal を再認証し、具体的な plan を確認できる状態にする。
-- bootstrap の適用は手元で personal を使い、本番の適用は PR → master マージ → 本人の prod 承認を通す。GitHub の prod / ops と Secrets の設定手順も整える。
+- bootstrap の適用は手元で personal を使い、本番の適用は PR → master マージ → 本人の prod 承認を通す。GitHub の prod / ops と Secrets は本人が設定する。
+- この段階は、環境の準備と検証（PR の必須チェック 11 件と実環境の plan の通過）までで区切る。マージ・prod 承認・apply・接続確認は Deployment Execution で行う。（Q8）
 
 この内容で実装と構築準備を進めてよいですか？
 
@@ -141,3 +146,13 @@ A. 作成した
 X. Other (please specify)
 
 [Answer]: A. 作成した（gitignore 済み・未追跡を確認。値は確認していない）
+
+## Q8. [プラットフォームエンジニア] この段階の区切り
+
+マージ・prod 承認・apply・接続確認は、Deployment Execution（本番への適用とスモークテスト）の作業にあたる。
+
+A. 環境の準備と検証（PR の CI と plan の通過）までで区切り、マージ以降は Deployment Execution で行う（推奨: AI-DLC の段階の分け方に沿う）
+B. apply と接続確認まで、この段階に含める
+X. Other (please specify)
+
+[Answer]: A. 準備と検証までで区切る
