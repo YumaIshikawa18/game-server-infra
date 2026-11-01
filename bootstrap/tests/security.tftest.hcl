@@ -14,12 +14,13 @@ mock_provider "aws" {
 }
 
 variables {
-  allowed_account_ids = ["123456789012"]
-  prefix              = "example"
-  state_bucket_name   = "example-state"
-  backup_bucket_name  = "example-backup"
-  log_bucket_name     = "example-logs"
-  github_repository   = "example/example"
+  allowed_account_ids        = ["123456789012"]
+  prefix                     = "example"
+  state_bucket_name          = "example-state"
+  backup_bucket_name         = "example-backup"
+  log_bucket_name            = "example-logs"
+  github_repository          = "example/example"
+  github_oidc_subject_prefix = "repo:example@100/example@200"
 }
 
 run "least_privilege" {
@@ -34,15 +35,15 @@ run "least_privilege" {
     error_message = "OIDC の audience を限定してください。"
   }
   assert {
-    condition     = toset(jsondecode(aws_iam_role.ci["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:environment:prod"])
+    condition     = toset(jsondecode(aws_iam_role.ci["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example@100/example@200:environment:prod"])
     error_message = "apply は prod の承認を通る subject だけを許可します。"
   }
   assert {
-    condition     = toset(jsondecode(aws_iam_role.ci["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:pull_request", "repo:example/example:ref:refs/heads/master"])
+    condition     = toset(jsondecode(aws_iam_role.ci["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example@100/example@200:pull_request", "repo:example@100/example@200:ref:refs/heads/master"])
     error_message = "plan は同一リポジトリの PR と master だけを許可します。"
   }
   assert {
-    condition     = toset(jsondecode(aws_iam_role.ci["ops"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:environment:ops"])
+    condition     = toset(jsondecode(aws_iam_role.ci["ops"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example@100/example@200:environment:ops"])
     error_message = "ops は ops Environment の subject だけを許可します。"
   }
   assert {
@@ -123,6 +124,22 @@ run "reject_long_log_retention" {
   command = plan
   variables { access_log_retention_days = 400 }
   expect_failures = [var.access_log_retention_days]
+}
+
+run "legacy_subject_format" {
+  command = plan
+  variables { github_oidc_subject_prefix = "repo:example/example" }
+
+  assert {
+    condition     = toset(jsondecode(aws_iam_role.ci["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset(["repo:example/example:environment:prod"])
+    error_message = "ID なしの従来形式の sub も使えるようにしてください。"
+  }
+}
+
+run "reject_subject_for_other_repository" {
+  command = plan
+  variables { github_oidc_subject_prefix = "repo:example@100/other@200" }
+  expect_failures = [var.github_oidc_subject_prefix]
 }
 
 run "reject_short_prefix" {

@@ -78,6 +78,20 @@ variable "github_repository" {
   }
 }
 
+variable "github_oidc_subject_prefix" {
+  description = "GitHub が OIDC トークンの sub に付ける接頭辞。immutable subject では repo:<owner>@<id>/<repo>@<id> になる（API の sub_claim_prefix）。"
+  type        = string
+  sensitive   = true
+
+  validation {
+    # owner と repo が github_repository と同じであることを確かめ、別リポジトリの取り違えを防ぐ。
+    condition = can(regex("^repo:[A-Za-z0-9_.-]+(@[0-9]+)?/[A-Za-z0-9_.-]+(@[0-9]+)?$", var.github_oidc_subject_prefix)) && (
+      replace(trimprefix(var.github_oidc_subject_prefix, "repo:"), "/@[0-9]+/", "") == var.github_repository
+    )
+    error_message = "repo:<owner>[@<id>]/<repo>[@<id>] の形式で、github_repository と同じ owner と repo を指定してください。"
+  }
+}
+
 variable "use_existing_github_oidc" {
   description = "既存の GitHub OIDC プロバイダーを変更せず再利用する。"
   type        = bool

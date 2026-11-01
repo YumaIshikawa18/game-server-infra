@@ -50,6 +50,9 @@ def main():
       raise ValueError('Active identity does not match the allowed account')
   repository = command(['gh', 'repo', 'view', '--json', 'nameWithOwner'])['nameWithOwner']
   target = ROOT / 'bootstrap/generated.auto.tfvars.json'
+  # immutable subject が有効なら、sub は ID 付きの接頭辞になる。API の値をそのまま使う。
+  oidc = command(['gh', 'api', f'repos/{repository}/actions/oidc/customization/sub'])
+  subject_prefix = oidc.get('sub_claim_prefix') or f'repo:{repository}'
   if target.exists():
     values = json.loads(target.read_text())
     if values['github_repository'] != repository:
@@ -57,6 +60,9 @@ def main():
     if 'log_bucket_name' not in values:
       # 後から追加した入力だけを補い、既存の値は変えない。
       values['log_bucket_name'] = values['prefix'] + '-logs-' + secrets.token_hex(4)
+      private_json(target, values)
+    if values.get('github_oidc_subject_prefix') != subject_prefix:
+      values['github_oidc_subject_prefix'] = subject_prefix
       private_json(target, values)
   else:
     prefix = 'mc-' + secrets.token_hex(4)
@@ -68,7 +74,7 @@ def main():
       'backup_bucket_name': prefix + '-backup-' + secrets.token_hex(4),
       'log_bucket_name': prefix + '-logs-' + secrets.token_hex(4),
       'state_key': 'prod/terraform.tfstate', 'lock_key': 'control/operation.lock',
-      'github_repository': repository,
+      'github_repository': repository, 'github_oidc_subject_prefix': subject_prefix,
       'use_existing_github_oidc': any(provider['Arn'].endswith(
         'oidc-provider/token.actions.githubusercontent.com') for provider in providers['OpenIDConnectProviderList']),
     }

@@ -1,9 +1,9 @@
 locals {
-  # var.github_repository は validation で owner/repo 形式を保証済み。
+  # GitHub が実際に送る sub の接頭辞（immutable subject なら ID 付き）。validation で形式と対象リポジトリを確認済み。
   ci_subjects = {
-    plan  = ["repo:${var.github_repository}:pull_request", "repo:${var.github_repository}:ref:refs/heads/master"]
-    apply = ["repo:${var.github_repository}:environment:prod"]
-    ops   = ["repo:${var.github_repository}:environment:ops"]
+    plan  = ["${var.github_oidc_subject_prefix}:pull_request", "${var.github_oidc_subject_prefix}:ref:refs/heads/master"]
+    apply = ["${var.github_oidc_subject_prefix}:environment:prod"]
+    ops   = ["${var.github_oidc_subject_prefix}:environment:ops"]
   }
   app_resources = {
     ssm       = "arn:${local.partition}:ssm:${var.region}:${local.account_id}:parameter/${var.prefix}/*"
