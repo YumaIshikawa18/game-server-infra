@@ -21,6 +21,8 @@ def client_mods(settings):
 
 
 def render(settings):
+  if settings['loader'] == 'vanilla' and settings['mods']:
+    raise ValueError('vanilla cannot list mods; set a loader')
   lines = [
     '# クライアントの準備',
     '',

@@ -172,6 +172,12 @@ class ClientGuide(unittest.TestCase):
     self.assertIn('なし（バニラ）', guide)
     self.assertNotIn('`mods` フォルダー', guide)
 
+  def test_vanilla_rejects_client_only_mods(self):
+    settings = self.settings(loader='vanilla', loader_version=None)
+    settings['mods'] = [mod for mod in settings['mods'] if mod['side'] == 'client']
+    with self.assertRaises(ValueError):
+      client_guide.render(settings)
+
   def test_committed_guide_matches_settings(self):
     self.assertEqual(client_guide.main(['--check']), 0)
 

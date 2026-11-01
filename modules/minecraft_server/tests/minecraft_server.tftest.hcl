@@ -131,6 +131,14 @@ run "reject_mod_without_concrete_version" {
   expect_failures = [var.mods]
 }
 
+run "reject_client_mods_on_vanilla" {
+  command = plan
+  variables {
+    mods = [{ name = "example-mod", version = "1.0.0", url = "https://example.com/example.jar", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", side = "client" }]
+  }
+  expect_failures = [var.mods]
+}
+
 run "reject_mods_on_vanilla" {
   command = plan
   variables {

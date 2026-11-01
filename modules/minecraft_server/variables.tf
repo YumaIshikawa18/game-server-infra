@@ -160,8 +160,9 @@ variable "mods" {
     error_message = "MOD は重複しない名前、具体的なバージョン、https の URL、64 桁の sha256、side（server / client / both）を指定してください。"
   }
   validation {
-    condition     = var.loader != "vanilla" || length([for mod in var.mods : mod if mod.side != "client"]) == 0
-    error_message = "vanilla ではサーバーに MOD を置けません。loader を指定してください。"
+    # クライアント専用の MOD にもローダーが必要で、vanilla の手順書では案内できない。
+    condition     = var.loader != "vanilla" || length(var.mods) == 0
+    error_message = "vanilla では MOD を指定できません。loader を指定してください。"
   }
 }
 
