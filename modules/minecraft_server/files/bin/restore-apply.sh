@@ -45,12 +45,13 @@ main() {
   # shellcheck disable=SC2064
   trap "rm -rf '$work'" EXIT
   archive="$work/archive.tar.zst"
+  # バックアップ時に保存した SHA-256（メタデータ）。転送の完全性は --checksum-mode で S3 の CRC も検証する。
   expected=$(aws s3api head-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" \
-    --checksum-mode ENABLED --query ChecksumSHA256 --output text)
+    --query Metadata.sha256 --output text)
   aws s3api get-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" \
     --checksum-mode ENABLED "$archive" >/dev/null
-  actual=$(openssl dgst -sha256 -binary "$archive" | base64)
-  if [[ -z $expected || $expected == None || $actual != "$expected" ]]; then
+  actual=$(sha256sum "$archive" | cut -d' ' -f1)
+  if [[ ! $expected =~ ^[0-9a-f]{64}$ || $actual != "$expected" ]]; then
     log error "event=restore_rejected reason=checksum_mismatch"
     notify restore_failed error "復元用バックアップの照合に失敗しました。ワールドは変更していません。"
     return 1

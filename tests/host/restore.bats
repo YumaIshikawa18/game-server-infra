@@ -14,7 +14,7 @@ setup() {
 
 make_archive() {
   tar --zstd -C "$BATS_TEST_TMPDIR/backup" -cf "$STUB_DIR/restore.tar.zst" .
-  openssl dgst -sha256 -binary "$STUB_DIR/restore.tar.zst" | base64 >"$STUB_DIR/checksum"
+  sha256sum "$STUB_DIR/restore.tar.zst" | cut -d' ' -f1 >"$STUB_DIR/checksum"
 }
 
 @test "正しいバックアップなら展開し、以前のワールドを退避する" {

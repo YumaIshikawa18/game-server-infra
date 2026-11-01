@@ -39,7 +39,7 @@ setup() {
   exec 9>&-
   [ "$status" -eq 0 ]
   [ "$(count_calls 'rcon-cli save-off')" -eq 0 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
 }
 
 @test "hourly: アップロードに失敗しても save-on に戻し、失敗を記録する" {
@@ -53,7 +53,7 @@ setup() {
 }
 
 @test "hourly: S3 の SHA-256 が一致しなければ失敗する" {
-  export STUB_REMOTE_CHECKSUM=bWlzbWF0Y2g=
+  export STUB_REMOTE_CHECKSUM=0000000000000000000000000000000000000000000000000000000000000000
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -ne 0 ]
   [ "$(count_calls 'rcon-cli save-on')" -ge 1 ]
@@ -63,8 +63,9 @@ setup() {
   backup_keys hourly 3
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -eq 0 ]
-  grep -q 'put-object .*--key hourly/' "$CALLS"
-  grep -q 'head-object .*--checksum-mode ENABLED' "$CALLS"
+  grep -q 's3 cp .*s3://example-backup/hourly/' "$CALLS"
+  grep -q 's3 cp .*--checksum-algorithm CRC64NVME --metadata sha256=' "$CALLS"
+  grep -q 'head-object .*ContentLength' "$CALLS"
   grep -q 'metric-name BackupFailures --value 0' "$CALLS"
   [ "$(count_calls 'rcon-cli save-on')" -eq 1 ]
 }
@@ -82,7 +83,7 @@ setup() {
 @test "stop: 通常はバックアップ後にコンテナを止め、EC2 の停止を予約する" {
   run "$MC_BIN/stop.sh" manual
   [ "$status" -eq 0 ]
-  grep -q 'put-object .*--key stop/' "$CALLS"
+  grep -q 's3 cp .*s3://example-backup/stop/' "$CALLS"
   grep -q 'docker stop -t 60 mc' "$CALLS"
   grep -q 'systemd-run .*ec2 stop-instances' "$CALLS"
   [ -e "$MC_STATE_DIR/stopping" ]
@@ -106,7 +107,7 @@ setup() {
   fail_tar
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -ne 0 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
   grep -q 'metric-name BackupFailures --value 1' "$CALLS"
   [ "$(count_calls 'rcon-cli save-on')" -ge 1 ]
 }
@@ -115,13 +116,13 @@ setup() {
   export STUB_RCON_FAIL=1
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -ne 0 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
   grep -q 'sns publish' "$CALLS"
   [ "$(count_calls 'rcon-cli save-on')" -ge 1 ]
 }
 
 @test "hourly: 照合に失敗したアップロードは削除する" {
-  export STUB_REMOTE_CHECKSUM=bWlzbWF0Y2g=
+  export STUB_REMOTE_CHECKSUM=0000000000000000000000000000000000000000000000000000000000000000
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -ne 0 ]
   grep -q 'delete-object .*--key hourly/' "$CALLS"
@@ -131,7 +132,7 @@ setup() {
   fail_tar
   run "$MC_BIN/stop.sh" replace true
   [ "$status" -eq 1 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
   [ "$(count_calls 'systemd-run')" -eq 0 ]
 }
 
@@ -139,7 +140,7 @@ setup() {
   export STUB_RCON_FAIL=1
   run "$MC_BIN/stop.sh" replace true
   [ "$status" -eq 1 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
   [ "$(count_calls 'systemd-run')" -eq 0 ]
   [ "$(count_calls 'docker stop')" -eq 0 ]
   [ "$(count_calls 'rcon-cli save-on')" -eq 1 ]
@@ -160,7 +161,7 @@ setup() {
   export MC_WORLD_MOUNT="$BATS_TEST_TMPDIR"
   run "$MC_BIN/backup-hourly.sh"
   [ "$status" -ne 0 ]
-  [ "$(count_calls 's3api put-object')" -eq 0 ]
+  [ "$(count_calls 'aws s3 cp')" -eq 0 ]
 }
 
 @test "stop: ロック待ちがタイムアウトしたら mc:stopping タグを外す（Codex P2）" {
@@ -186,4 +187,32 @@ setup() {
   run "$MC_BIN/stop.sh" manual
   [ "$status" -eq 0 ]
   [ "$(count_calls 'delete-tags')" -eq 0 ]
+}
+
+@test "stop: 置き換えの途中で強制終了されたら save-on に戻してタグを外す（Codex P1）" {
+  # アップロード中に SSM の実行上限で終了させられた場合を、アップロードのスタブから TERM を送って再現する。
+  # 親はアップロード用のサブシェルなので、stop.sh のプロセスすべてに送る（実行上限での終了と同じ）。
+  cat >"$STUB_DIR/bin/aws" <<'STUB'
+#!/usr/bin/env bash
+printf 'aws %s\n' "$*" >>"$CALLS"
+if [[ "$1 $2" == "s3 cp" ]]; then
+  pkill -TERM -f 'files/bin/stop.sh'
+  sleep 1
+fi
+exit 0
+STUB
+  chmod +x "$STUB_DIR/bin/aws"
+  run "$MC_BIN/stop.sh" replace true
+  [ "$status" -eq 143 ]
+  [ "$(count_calls 'rcon-cli save-on')" -ge 1 ]
+  grep -q 'delete-tags .*Key=mc:stopping' "$CALLS"
+  [ "$(count_calls 'systemd-run')" -eq 0 ]
+}
+
+@test "アップロード後のサイズや SHA-256 が一致しなければ失敗する" {
+  export STUB_REMOTE_CHECKSUM=0000000000000000000000000000000000000000000000000000000000000000
+  run "$MC_BIN/stop.sh" replace true
+  [ "$status" -eq 1 ]
+  grep -q 'delete-object .*--key stop/' "$CALLS"
+  [ "$(count_calls 'systemd-run')" -eq 0 ]
 }

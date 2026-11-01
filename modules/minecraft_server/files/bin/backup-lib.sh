@@ -22,16 +22,24 @@ trim_generations() {
   done < <(printf '%s\n' "$keys" | head -n "$excess")
 }
 
-# ワールドを圧縮して S3 に送り、S3 側で計算した SHA-256 と照合する。
-# 成功したらキーを標準出力に出す。RCON の save-off は呼び出し元が管理する。
+# ワールドを圧縮して S3 に送り、照合する。成功したらキーを標準出力に出す。RCON の save-off は呼び出し元が管理する。
+# - 5 GB を超えても上げられるよう aws s3 cp（自動でマルチパート）を使い、転送の完全性は S3 に CRC64NVME で検証させる
+# - マルチパートでは S3 がファイル全体の SHA-256 を持たないため、手元の SHA-256 をメタデータに保存し、
+#   アップロード後にサイズとともに照合する。復元時はダウンロードしたファイルをこの SHA-256 と照合する
 # 呼び出し元は `if key=$(upload_world ...)` の形で使うため、Bash の仕様で set -e が効かない。
-# そのため、すべての手順の失敗を明示的に判定し、途中で失敗したら何もアップロードせずに失敗を返す。
+# そのため、すべての手順の失敗を明示的に判定し、途中で失敗したら失敗を返す。
 # サブシェルで実行し、失敗時も一時ファイルを残さない（EXIT trap は呼び出し元に影響しない）。
 upload_world() (
   local kind=$1 stamp key archive sum remote started size
   fail() {
     log error "event=backup_failed kind=${kind} step=$1"
     exit 1
+  }
+  # 照合できなかったオブジェクトは世代として数えられないよう削除する。
+  discard() {
+    aws s3api delete-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" >/dev/null ||
+      log warn "event=backup_discard_failed kind=${kind}"
+    fail "$1"
   }
   # マウントされていないとルートディスク上の空のワールドを保存してしまう。
   world_mounted || fail world_not_mounted
@@ -43,20 +51,14 @@ upload_world() (
   trap "rm -f '$archive'" EXIT
   tar --zstd -C "$MC_ROOT/data" -cf "$archive" . || fail archive
   [[ -s $archive ]] || fail archive
-  sum=$(set -o pipefail; openssl dgst -sha256 -binary "$archive" | base64) || fail checksum
-  [[ -n $sum ]] || fail checksum
-  aws s3api put-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" --body "$archive" \
-    --checksum-sha256 "$sum" --server-side-encryption AES256 >/dev/null || fail upload
-  # 照合できなかったオブジェクトは世代として数えられないよう削除する。
-  discard() {
-    aws s3api delete-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" >/dev/null ||
-      log warn "event=backup_discard_failed kind=${kind}"
-    fail "$1"
-  }
-  remote=$(aws s3api head-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" \
-    --checksum-mode ENABLED --query ChecksumSHA256 --output text) || discard verify
-  [[ $remote == "$sum" ]] || discard checksum_mismatch
+  sum=$(set -o pipefail; sha256sum "$archive" | cut -d' ' -f1) || fail checksum
+  [[ $sum =~ ^[0-9a-f]{64}$ ]] || fail checksum
   size=$(stat -c %s "$archive") || fail size
+  aws s3 cp "$archive" "s3://${MC_BUCKET}/${key}" --region "$MC_REGION" --only-show-errors \
+    --sse AES256 --checksum-algorithm CRC64NVME --metadata "sha256=${sum}" || fail upload
+  remote=$(aws s3api head-object --region "$MC_REGION" --bucket "$MC_BUCKET" --key "$key" \
+    --query '[ContentLength, Metadata.sha256]' --output text) || discard verify
+  [[ $remote == "${size}"$'\t'"${sum}" ]] || discard checksum_mismatch
   metric BackupSizeBytes "$size" Bytes
   metric BackupDurationSeconds "$(($(date +%s) - started))" Seconds
   printf '%s\n' "$key"

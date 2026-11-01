@@ -28,17 +28,18 @@ STOP_COMMITTED=false
 # mc:stopping タグと停止中の印を外す。残ると watchdog と health.sh が止まったままになる。
 release_stopping() {
   if [[ $STOP_COMMITTED != true ]]; then
+    # save-off の後に中断された場合も、動き続けるサーバーの自動保存を戻す（何度送っても害はない）。
+    if container_running; then
+      rcon save-on >/dev/null || log warn "event=save_on_failed"
+    fi
     untag_self mc:stopping || log warn "event=untag_failed tag=mc:stopping"
     rm -f "$MC_STATE_DIR/stopping"
   fi
 }
 
-# 置き換えの前提が満たせないので停止しない。保存を再開する（タグと印は release_stopping が外す）。
+# 置き換えの前提が満たせないので停止しない（保存の再開・タグと印の解除は release_stopping が行う）。
 refuse_stop() {
   local reason=$1 step=$2
-  if container_running; then
-    rcon save-on >/dev/null || log warn "event=save_on_failed"
-  fi
   notify stop_refused error "${step}に失敗したため、置き換え前の停止を中止しました（理由: ${reason}）。"
 }
 

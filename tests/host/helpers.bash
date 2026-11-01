@@ -36,14 +36,18 @@ value_of() {
 }
 case "$args" in
   *" s3api list-objects-v2 "*) cat "$STUB_DIR/list.json" 2>/dev/null || printf 'null\n' ;;
-  *" s3api put-object "*)
+  *" s3 cp "*)
     [[ ${STUB_PUT_FAIL:-0} == 1 ]] && exit 1
+    # アップロードしたファイルのサイズと、メタデータの sha256 を S3 側の値として覚える。
+    stat -c %s "$3" >"$STUB_DIR/size"
     previous=""
     for arg in "$@"; do
-      [[ $previous == --checksum-sha256 ]] && printf '%s' "$arg" >"$STUB_DIR/checksum"
+      [[ $previous == --metadata ]] && printf '%s' "${arg#sha256=}" >"$STUB_DIR/checksum"
       previous=$arg
     done ;;
-  *" s3api head-object "*) printf '%s\n' "${STUB_REMOTE_CHECKSUM:-$(cat "$STUB_DIR/checksum" 2>/dev/null)}" ;;
+  *" s3api head-object "*ContentLength*)
+    printf '%s\t%s\n' "$(cat "$STUB_DIR/size" 2>/dev/null)" "${STUB_REMOTE_CHECKSUM:-$(cat "$STUB_DIR/checksum" 2>/dev/null)}" ;;
+  *" s3api head-object "*Metadata.sha256*) printf '%s\n' "${STUB_REMOTE_CHECKSUM:-$(cat "$STUB_DIR/checksum" 2>/dev/null)}" ;;
   *" s3api get-object "*) cp "$STUB_DIR/restore.tar.zst" "${@: -1}" ;;
   *" s3api list-object-versions "*) printf '123\n' ;;
   *" ec2 describe-tags "*) printf '%s\n' "${STUB_MODE:-None}" ;;
