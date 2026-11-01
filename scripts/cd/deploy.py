@@ -1,5 +1,6 @@
 """承認前 plan と承認後 apply。plan の値は公開しない。"""
 
+import contextlib
 import hashlib
 import json
 import os
@@ -8,6 +9,37 @@ import sys
 
 from scripts.cd import common
 from scripts.ci import plan as ci
+
+
+@contextlib.contextmanager
+def step(name):
+  """生の例外本文を表示せずに、失敗した処理だけを追えるようにする。"""
+  try:
+    yield
+  except Exception as error:
+    if not hasattr(error, '_deployment_step'):
+      error._deployment_step = name
+    raise
+
+
+def diagnostics(error):
+  allowed_steps = {'terraform-init', 'terraform-plan', 'terraform-show', 'operational-lock',
+           'approval-comparison', 'replacement-protection', 'terraform-apply', 'smoke-test'}
+  result = []
+  seen = set()
+  while error is not None and id(error) not in seen and len(result) < 4:
+    seen.add(id(error))
+    name = getattr(error, '_deployment_step', 'unknown')
+    item = {'step': name if name in allowed_steps else 'unknown',
+        'kind': 'aws' if isinstance(error, common.AwsError) else
+            'timeout' if isinstance(error, TimeoutError) else
+            'validation' if isinstance(error, ValueError) else 'runtime'}
+    if isinstance(error, common.AwsError):
+      code = error.code
+      item['aws_code'] = code if re.fullmatch(r'[A-Za-z][A-Za-z0-9]{0,63}', code) else 'Unknown'
+    result.append(item)
+    error = error.__cause__ or error.__context__
+  return result
 
 
 def digest(plan):
@@ -22,7 +54,9 @@ def digest(plan):
     'variables': plan.get('variables', {}),
     'configuration': plan.get('configuration', {}),
     'planned_values': plan.get('planned_values', {}),
-    'relevant_attributes': plan.get('relevant_attributes', []),
+    # 参照元の一覧は同じ plan でも列挙順が変わる。属性パス内の順序と参照内容は維持する。
+    'relevant_attributes': sorted(plan.get('relevant_attributes', []),
+                   key=lambda item: json.dumps(item, sort_keys=True, separators=(',', ':'))),
   }
   raw = json.dumps(comparison, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
   return hashlib.sha256(raw.encode()).hexdigest()
@@ -37,10 +71,13 @@ def make_plan(work):
     'bucket': ci.required('TF_STATE_BUCKET'), 'key': ci.required('TF_STATE_KEY'),
     'region': ci.required('AWS_REGION'), 'encrypt': True, 'use_lockfile': True,
   }.items()))
-  ci.terraform(['init', '-input=false', '-lockfile=readonly', f'-backend-config={backend}'])
+  with step('terraform-init'):
+    ci.terraform(['init', '-input=false', '-lockfile=readonly', f'-backend-config={backend}'])
   path = work / 'plan.bin'
-  ci.terraform(['plan', '-input=false', '-no-color', '-lock-timeout=5m', f'-out={path}'])
-  plan = json.loads(ci.terraform(['show', '-json', str(path)]))
+  with step('terraform-plan'):
+    ci.terraform(['plan', '-input=false', '-no-color', '-lock-timeout=5m', f'-out={path}'])
+  with step('terraform-show'):
+    plan = json.loads(ci.terraform(['show', '-json', str(path)]))
   return path, plan
 
 
@@ -107,17 +144,21 @@ def apply():
   if not re.fullmatch(r'[0-9a-f]{64}', expected):
     raise ValueError('Approved plan digest is missing')
   common.require_master()
-  with common.Lock() as lock, common.private_work() as work:
+  with step('operational-lock'), common.Lock() as lock, common.private_work() as work:
     common.require_master()
     path, plan = make_plan(work)
-    if digest(plan) != expected:
-      raise ValueError('Plan changed after approval; rerun and approve again')
+    with step('approval-comparison'):
+      if digest(plan) != expected:
+        raise ValueError('Plan changed after approval; rerun and approve again')
     common.require_master()
     # 変更開始後に失敗したら、途中の状態を確認するまでロックを残す。
     lock.keep = True
-    replacement_stop(plan)
-    ci.terraform(['apply', '-input=false', '-no-color', str(path)])
-    smoke()
+    with step('replacement-protection'):
+      replacement_stop(plan)
+    with step('terraform-apply'):
+      ci.terraform(['apply', '-input=false', '-no-color', str(path)])
+    with step('smoke-test'):
+      smoke()
     lock.keep = False
 
 
@@ -134,8 +175,9 @@ def main():
       common.notify('deployment-failed')
     else:
       raise ValueError('Unknown deployment operation')
-  except Exception:
+  except Exception as error:
     print('::error::Deployment step failed. Inspect the safe summary and rollback runbook; raw AWS output is withheld.')
+    print('deployment_errors=' + json.dumps(diagnostics(error), sort_keys=True))
     return 1
   return 0
 

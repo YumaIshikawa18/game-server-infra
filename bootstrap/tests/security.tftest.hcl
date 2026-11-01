@@ -92,6 +92,38 @@ run "least_privilege" {
   }
 }
 
+run "operational_lock_permissions" {
+  command = plan
+
+  assert {
+    condition = alltrue([for policy in [aws_iam_role_policy.ops.policy, aws_iam_policy.apply["state"].policy] :
+      anytrue([for statement in jsondecode(policy).Statement :
+        statement.Effect == "Allow" && contains(tolist(statement.Action), "s3:GetObject")
+        && try(statement.Resource == "arn:aws:s3:::example-state/control/operation.lock", false)
+        && !can(statement.Condition)
+      ])
+    ])
+    error_message = "apply と ops の条件付きロック解除には、専用ロック 1 キーの GetObject が必要です。"
+  }
+  assert {
+    condition = alltrue([for statement in jsondecode(aws_iam_role_policy.ops.policy).Statement :
+      !contains(tolist(statement.Action), "s3:GetObject")
+      || try(statement.Resource == "arn:aws:s3:::example-state/control/operation.lock", false)
+    ])
+    error_message = "ops の読み取りを state 本体やロック以外のキーに広げないでください。"
+  }
+  assert {
+    condition = alltrue([for policy in [aws_iam_role_policy.ops.policy, aws_iam_policy.apply["state"].policy] :
+      anytrue([for statement in jsondecode(policy).Statement :
+        contains(tolist(statement.Action), "s3:DeleteObject")
+        && try(statement.Resource == "arn:aws:s3:::example-state/control/operation.lock", false)
+        && try(statement.Condition.Null["s3:if-match"] == "false", false)
+      ])
+    ])
+    error_message = "専用ロックの削除は If-Match の条件を維持してください。"
+  }
+}
+
 run "access_logs" {
   command = plan
 
