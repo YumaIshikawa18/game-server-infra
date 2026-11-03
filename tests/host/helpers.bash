@@ -28,9 +28,10 @@ write_stubs() {
 printf 'aws %s\n' "$*" >>"$CALLS"
 args=" $* "
 value_of() {
-  local previous=""
+  local flag=$1 previous=""
+  shift
   for arg in "$@"; do
-    if [[ $previous == "$1" ]]; then printf '%s' "$arg"; return; fi
+    if [[ $previous == "$flag" ]]; then printf '%s' "$arg"; return; fi
     previous=$arg
   done
 }
@@ -51,7 +52,22 @@ case "$args" in
   *" s3api get-object "*) cp "$STUB_DIR/restore.tar.zst" "${@: -1}" ;;
   *" s3api list-object-versions "*) printf '123\n' ;;
   *" ec2 describe-tags "*) printf '%s\n' "${STUB_MODE:-None}" ;;
-  *" ssm get-parameter "*) printf '%s\n' "${STUB_WHITELIST:-player_one,PlayerTwo}" ;;
+  *" ssm get-parameter "*)
+    case "$(value_of --name "$@")" in
+      */ops)
+        # STUB_OPS がなければ未登録として扱う（実際の SSM は空の値を返さない）。
+        if [[ -n ${STUB_OPS_ERROR:-} || -z ${STUB_OPS+set} ]]; then
+          printf 'An error occurred (%s) when calling the GetParameter operation: stub-error-detail\n' "${STUB_OPS_ERROR:-ParameterNotFound}" >&2
+          exit 254
+        fi
+        printf '%s\n' "$STUB_OPS" ;;
+      *)
+        if [[ ${STUB_WHITELIST_FAIL:-0} == 1 ]]; then
+          printf 'An error occurred (AccessDeniedException) when calling the GetParameter operation: stub-error-detail\n' >&2
+          exit 254
+        fi
+        printf '%s\n' "${STUB_WHITELIST:-player_one,PlayerTwo}" ;;
+    esac ;;
 esac
 exit 0
 STUB

@@ -14,6 +14,8 @@ locals {
     ENABLE_WHITELIST        = "TRUE"
     ENFORCE_WHITELIST       = "TRUE"
     EXISTING_WHITELIST_FILE = "SYNCHRONIZE"
+    EXISTING_OPS_FILE       = "SYNCHRONIZE"
+    OP_PERMISSION_LEVEL     = "3"
     ENABLE_RCON             = "true"
     MAX_PLAYERS             = tostring(var.game_settings.max_players)
     VIEW_DISTANCE           = tostring(var.game_settings.view_distance)
