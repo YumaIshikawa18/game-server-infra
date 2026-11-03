@@ -51,6 +51,67 @@ AWS 上で Minecraft サーバーを動かすための Terraform 一式です。
 2. `python3 scripts/ci/client_guide.py` で手順書を更新します。更新を忘れると CI が失敗します。
 3. PR をマージして Deploy を承認し、次の起動から反映します。必要に応じて、一緒に遊ぶ人に [クライアントの準備](docs/client-setup.md) を案内します。
 
+## オペレーター権限
+
+SSM Parameter Store の SecureString に登録した名前に、ゲーム内のオペレーター権限（レベル 3）を付与します。レベル 3 では `/gamemode` と `/kick` を使えますが、`/stop` は使えません。一覧の値は起動のたびに読むため、変更に PR とデプロイは不要で、次の起動から反映されます。動作中のサーバーの権限は、次の起動まで変わりません。
+
+パラメータ名は `envs/prod` の出力 `ops_parameter` で確認します。値は、Minecraft の名前をカンマで区切った形式で、すべてホワイトリストにある名前にします。名前やパラメータ名は、PR やログに貼らないでください。
+
+### 登録と変更
+
+```bash
+aws ssm put-parameter --profile personal --region ap-northeast-1 --type SecureString --overwrite \
+  --name "<ops_parameter の値>" --value "<プレイヤー名>,<プレイヤー名>"
+```
+
+### 取り消し
+
+一覧から名前を外して上の手順で更新するか、全員を取り消すときはパラメータを削除します。削除すると、次の起動でオペレーターは 0 人になります。
+
+```bash
+aws ssm delete-parameter --profile personal --region ap-northeast-1 --name "<ops_parameter の値>"
+```
+
+ゲーム内の `/op` で付けた権限も、次の起動で消えます。
+
+### 反映の確認
+
+Stop と Start の workflow で起動し直してから、次を確認します。
+
+1. CloudWatch Logs のロググループ `/<prefix>/scripts` で、最新の `event=env_prepared` の `ops=` が期待する人数であること。
+2. 起動直後、`/op` を使う前に、Session Manager でホストに接続し、`sudo jq . /srv/minecraft/data/ops.json` の内容が一覧と同じで、`level` が 3 であること。
+3. ゲーム内で、一覧にある人は `/gamemode` と `/kick` を実行でき、`/stop` は拒否されること。取り消した人は `/gamemode` が拒否されること。
+
+### 起動が失敗するとき
+
+一覧を読めない、形式が正しくない、ホワイトリストにない名前がある場合は、`start_failed` が通知され、起動を中止します。通知の文面に名前は含まれません。一覧を直すか、パラメータを削除して、もう一度 Start します。
+
+オペレーターの名前をホワイトリストから外すときは、先にオペレーターの一覧から外します。順序が逆だと、次の起動が失敗します。
+
+### ロールバック
+
+この仕組みを外すときは、順序を守ります。先に外すと `OPS` が未設定になり、`ops.json` がそのまま残って権限も残ります。
+
+1. パラメータを削除し、Stop と Start を行います。
+2. `ops=0` で、`ops.json` が `[]` であることを確認します。
+3. revert の PR をマージし、Deploy を承認します。
+
+配布したスクリプトの問題で起動できず、先に revert したときは `ops.json` が残ります。次の手順で空にします。
+
+1. revert を適用して Start します。
+2. Session Manager でホストに接続し、コンテナを止めて `ops.json` を `[]` にします。
+
+   ```bash
+   sudo systemctl stop minecraft.service
+   echo '[]' | sudo tee /srv/minecraft/data/ops.json
+   ```
+
+3. Stop と Start を行い、`ops.json` が `[]` のままであることを確認します。
+
+### イメージの digest を更新するとき
+
+`ops.json` の種の形式はイメージの内部の動作に依存し、CI では検知できません。`docker/compose.yml` の digest を更新したら、次の起動で `ops.json` の `level` が 3 のままであることを確認します。
+
 ## 自分の AWS アカウントに作る
 
 ### 前提
@@ -100,6 +161,8 @@ AWS 上で Minecraft サーバーを動かすための Terraform 一式です。
 6. SSM Parameter Store に SecureString を 2 つ登録します。
    - `/<prefix>/minecraft/whitelist`: プレイヤー名（カンマ区切り）
    - `/<prefix>/minecraft/discord-webhook`: Discord の Webhook URL
+
+   オペレーターの一覧（`/<prefix>/minecraft/ops`）は任意です。未登録ならオペレーターは 0 人です。登録の手順は [オペレーター権限](#オペレーター権限) にあります。
 7. `master` へマージして Deploy を承認します。apply の後に届く SNS の確認メールを承認し、Minecraft クライアントから接続します。接続先のアドレスは、`envs/prod` の出力 `server_address` で確認できます。
 
 `<prefix>` は `bootstrap/generated.auto.tfvars.json` の `prefix` の値です。これらの生成ファイルは gitignore 済みです。

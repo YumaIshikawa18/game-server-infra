@@ -17,6 +17,12 @@ output "whitelist_parameter" {
   sensitive   = true
 }
 
+output "ops_parameter" {
+  description = "本人がオペレーターの一覧を登録する SSM SecureString の名前。未登録ならオペレーターは 0 人。"
+  value       = "${module.minecraft_server.parameter_prefix}/ops"
+  sensitive   = true
+}
+
 output "discord_webhook_parameter" {
   description = "本人が Discord の Webhook URL を登録する SSM SecureString の名前。"
   value       = "/${var.prefix}/minecraft/discord-webhook"

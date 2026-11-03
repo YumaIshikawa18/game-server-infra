@@ -17,6 +17,8 @@
 
 - ALWAYS AI-DLC のフェーズが終わるたびに、作業ブランチ（master 以外）でそのフェーズの記録と成果物をコミットする (learned 2026-10-31) <!-- cid:261031-minecraft-aws-server:infrastructure-design:47b02951048d389dd44695c56acf6ee17cdbac682fe9f57cbf264acae06e3e6b -->
 
+- ALWAYS 各フェーズの終わりに、要件（FR / NFR）と実装や成果物を突き合わせ、未実装の項目や、要件より後の記録に出てこない項目がないことを確認する (learned 2026-11-01) <!-- cid:261031-minecraft-aws-server:observability-setup:3c723171cc2dcbe2dfc5daf3ff0ae6d65acfa48bc62cc83c5818a513f4f7cf4b -->
+
 ## Walking Skeleton
 
 <!-- Project-specific specialisation. Example: -->

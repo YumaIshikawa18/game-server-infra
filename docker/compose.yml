@@ -14,7 +14,7 @@ services:
       - "25565:25565"
     env_file:
       - /opt/minecraft/minecraft.env
-      # whitelist と RCON パスワード（root だけが読める 0600）。
+      # whitelist、オペレーターの一覧、RCON パスワード（root だけが読める 0600）。
       - /etc/minecraft/secrets.env
     volumes:
       - /srv/minecraft/data:/data

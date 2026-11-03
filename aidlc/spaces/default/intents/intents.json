@@ -6,5 +6,13 @@
     "scope": "infra",
     "status": "complete",
     "request": "06e5ac77"
+  },
+  {
+    "uuid": "01a1a0c9-44fb-7f50-8216-ea3a80d1b73d",
+    "slug": "discord-multi-server",
+    "dirName": "261103-discord-multi-server",
+    "scope": "bugfix",
+    "status": "in-flight",
+    "request": "2a83b03d"
   }
 ]

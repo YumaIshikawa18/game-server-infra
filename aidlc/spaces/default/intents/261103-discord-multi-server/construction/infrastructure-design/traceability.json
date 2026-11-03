@@ -1,0 +1,55 @@
+{
+  "stage": "infrastructure-design",
+  "upstream_ids": [
+    "NFR1",
+    "NFR2",
+    "NFR3",
+    "NFR4",
+    "NFR5",
+    "NFR6",
+    "NFR7",
+    "NFR8"
+  ],
+  "coverage": [
+    {
+      "id": "NFR1",
+      "status": "OK",
+      "target": "SSM SecureString をご本人が手元で登録し、Terraform で扱わない。ログは人数だけ"
+    },
+    {
+      "id": "NFR2",
+      "status": "OK",
+      "target": "prepare-env.sh の secrets.env の書き込み（既存の 0600 と mv を維持）"
+    },
+    {
+      "id": "NFR3",
+      "status": "OK",
+      "target": "prepare-env.sh が起動ごとに ops.json を種で置き換える。cicd-pipeline.md の確認手順 5"
+    },
+    {
+      "id": "NFR4",
+      "status": "OK",
+      "target": "未登録を 0 人として起動。cicd-pipeline.md の確認手順 2 と 9"
+    },
+    {
+      "id": "NFR5",
+      "status": "OK",
+      "target": "monitoring-design.md の event=env_prepared の ops="
+    },
+    {
+      "id": "NFR6",
+      "status": "OK",
+      "target": "新しい AWS リソースなし。既存の deploy/ の S3 オブジェクトの更新のみ"
+    },
+    {
+      "id": "NFR7",
+      "status": "OK",
+      "target": "cicd-pipeline.md の PR ステージの既存の必須チェック"
+    },
+    {
+      "id": "NFR8",
+      "status": "OK",
+      "target": "cicd-pipeline.md のデプロイの手順（実 Start での確認）"
+    }
+  ]
+}

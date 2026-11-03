@@ -86,6 +86,18 @@ run "secure_host" {
     error_message = "秘匿値は配布ファイルに入れず、起動時に SSM とホストで用意してください。"
   }
   assert {
+    condition     = strcontains(aws_s3_object.deploy["minecraft.env"].content, "EXISTING_OPS_FILE=SYNCHRONIZE\n") && strcontains(aws_s3_object.deploy["minecraft.env"].content, "OP_PERMISSION_LEVEL=3\n")
+    error_message = "ops.json を同期し、ゲーム内の /op のレベルを 3 にしてください。"
+  }
+  assert {
+    condition     = !can(regex("(?m)^OPS=", aws_s3_object.deploy["minecraft.env"].content))
+    error_message = "オペレーターの一覧は配布ファイルに入れず、起動時に SSM から読んでください。"
+  }
+  assert {
+    condition     = contains(keys(aws_s3_object.deploy), "bin/prepare-env.sh")
+    error_message = "起動前の準備を行う prepare-env.sh を配布してください。"
+  }
+  assert {
     condition     = contains(keys(aws_s3_object.deploy), "bin/stop.sh") && contains(keys(aws_s3_object.deploy), "systemd/minecraft.service") && alltrue([for _, object in aws_s3_object.deploy : object.server_side_encryption == "AES256"])
     error_message = "スクリプトとユニットを暗号化して配布してください。"
   }

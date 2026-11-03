@@ -12121,3 +12121,39 @@
 **Session**: 48628e48-5987-4fa7-b6f2-417e18c95eb9
 
 ---
+
+## Rule Learned
+**Timestamp**: 2026-11-01T15:33:30Z
+**Event**: RULE_LEARNED
+**Stage**: observability-setup
+**Candidate-ID**: n1
+**Content-Hash**: 3c723171cc2dcbe2dfc5daf3ff0ae6d65acfa48bc62cc83c5818a513f4f7cf4b
+**Destination**: <project-dir>/aidlc/spaces/default/memory/project.md
+**Heading**: ## Way of Working
+**Source**: user_addition
+
+---
+
+## Session Start
+**Timestamp**: 2026-11-01T15:34:07Z
+**Event**: SESSION_STARTED
+**Source**: startup
+**Session**: 914b8ee2-aa93-4a48-863a-4a2d4c7056ed
+
+---
+
+## Session Start
+**Timestamp**: 2026-11-03T09:35:41Z
+**Event**: SESSION_STARTED
+**Source**: startup
+**Session**: 14b3b7b3-c819-42c8-9e86-32adaafb43ef
+
+---
+
+## Session Start
+**Timestamp**: 2026-11-03T09:37:12Z
+**Event**: SESSION_STARTED
+**Source**: startup
+**Session**: 2ac7b917-57f3-45a1-8e21-b560ca455e10
+
+---
